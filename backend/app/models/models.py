@@ -61,6 +61,7 @@ class CardType(str, enum.Enum):
 
 
 class CardStatus(str, enum.Enum):
+    pending = "pending"
     active = "active"
     blocked = "blocked"
     expired = "expired"
