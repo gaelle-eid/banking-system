@@ -12,6 +12,8 @@ class Settings(BaseSettings):
 
     pydantic_ai_gateway_api_key: str = ""
     resend_api_key: str = ""
+    frontend_url: str = "http://localhost:5173"
+
     class Config:
         env_file = "../.env"  # backend/ -> project root .env
         extra = "ignore"

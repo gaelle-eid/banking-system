@@ -3,7 +3,7 @@ import enum
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, String, Numeric, ForeignKey, DateTime, Enum, Text, JSON
+    Column, String, Numeric, ForeignKey, DateTime, Enum, Text, JSON, Boolean
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, declarative_base
@@ -112,10 +112,13 @@ class User(Base):
     address = Column(String, nullable=True)
     national_id = Column(String, nullable=True)
     role = Column(Enum(UserRole), nullable=False)
+    is_verified = Column(Boolean, default=False, nullable=False)
+    verification_token = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     accounts = relationship("Account", back_populates="owner")
-    
+
+
 class Account(Base):
     __tablename__ = "accounts"
 
@@ -130,6 +133,7 @@ class Account(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     owner = relationship("User", back_populates="accounts")
+
 
 class Transaction(Base):
     __tablename__ = "transactions"
@@ -239,6 +243,3 @@ class AgentActionLog(Base):
     output = Column(JSON, nullable=True)
     status = Column(Enum(AgentActionStatus), default=AgentActionStatus.pending_approval)
     created_at = Column(DateTime, default=datetime.utcnow)
-
-
-
