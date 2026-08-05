@@ -26,9 +26,9 @@ export function AuthProvider({ children }) {
     setUser(meRes.data)
   }
 
-async function register(email, password, full_name, phone, date_of_birth) {
-    await api.post('/auth/register', { email, password, full_name, phone, date_of_birth, role: 'client' })
-    await login(email, password)
+  async function register(formData) {
+    await api.post('/auth/register', { ...formData, role: 'client' })
+    await login(formData.email, formData.password)
   }
 
   function logout() {
