@@ -44,3 +44,24 @@ def send_welcome_email(to: str, full_name: str):
     </div>
     """
     return send_email(to, "Welcome to Banking System", html)
+
+
+
+def send_transaction_email(to: str, full_name: str, tx_type: str, amount: str, account_label: str, new_balance: str):
+    verb = {
+        "deposit": "deposited into",
+        "withdrawal": "withdrawn from",
+        "transfer_debit": "sent from",
+        "transfer_credit": "received into",
+    }.get(tx_type, "processed on")
+
+    html = f"""
+    <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
+      <h2>Transaction notification</h2>
+      <p>Hi {full_name},</p>
+      <p><strong>{amount}</strong> was {verb} your <strong>{account_label}</strong> account.</p>
+      <p>New balance: <strong>{new_balance}</strong></p>
+      <p style="color:#8A93A6;font-size:12px;">If you didn't expect this, contact support immediately.</p>
+    </div>
+    """
+    return send_email(to, f"Transaction alert: {tx_type.replace('_', ' ').title()}", html)

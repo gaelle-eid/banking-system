@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.email import send_transaction_email
 from app.models.models import Account, Transaction, TransactionType, TransactionStatus, User
 from app.schemas.transaction import DepositRequest, WithdrawalRequest, TransferRequest, TransactionOut
 
@@ -41,6 +42,17 @@ async def deposit(
     db.add(tx)
     await db.commit()
     await db.refresh(tx)
+
+    try:
+        send_transaction_email(
+            current_user.email, current_user.full_name, "deposit",
+            f"{payload.amount} {account.currency}",
+            account.nickname or account.type.value,
+            f"{account.balance} {account.currency}",
+        )
+    except Exception:
+        pass
+
     return tx
 
 
@@ -66,6 +78,17 @@ async def withdraw(
     db.add(tx)
     await db.commit()
     await db.refresh(tx)
+
+    try:
+        send_transaction_email(
+            current_user.email, current_user.full_name, "withdrawal",
+            f"{payload.amount} {account.currency}",
+            account.nickname or account.type.value,
+            f"{account.balance} {account.currency}",
+        )
+    except Exception:
+        pass
+
     return tx
 
 
@@ -113,6 +136,27 @@ async def transfer(
     await db.commit()
     await db.refresh(debit_tx)
     await db.refresh(credit_tx)
+
+    to_owner_result = await db.execute(select(User).where(User.id == to_account.owner_id))
+    to_owner = to_owner_result.scalar_one_or_none()
+
+    try:
+        send_transaction_email(
+            current_user.email, current_user.full_name, "transfer_debit",
+            f"{payload.amount} {from_account.currency}",
+            from_account.nickname or from_account.type.value,
+            f"{from_account.balance} {from_account.currency}",
+        )
+        if to_owner:
+            send_transaction_email(
+                to_owner.email, to_owner.full_name, "transfer_credit",
+                f"{payload.amount} {to_account.currency}",
+                to_account.nickname or to_account.type.value,
+                f"{to_account.balance} {to_account.currency}",
+            )
+    except Exception:
+        pass
+
     return [debit_tx, credit_tx]
 
 
