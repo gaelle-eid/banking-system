@@ -109,10 +109,13 @@ class User(Base):
     full_name = Column(String, nullable=False)
     phone = Column(String, nullable=True)
     date_of_birth = Column(DateTime, nullable=True)
+    address = Column(String, nullable=True)
+    national_id = Column(String, nullable=True)
     role = Column(Enum(UserRole), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     accounts = relationship("Account", back_populates="owner")
+    
 class Account(Base):
     __tablename__ = "accounts"
 

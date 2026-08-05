@@ -18,11 +18,13 @@ async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Email already registered")
 
     user = User(
-        email=payload.email,
+         email=payload.email,
         password_hash=hash_password(payload.password),
         full_name=payload.full_name,
         phone=payload.phone,
         date_of_birth=payload.date_of_birth,
+        address=payload.address,
+        national_id=payload.national_id,
         role=payload.role,
     )
     db.add(user)
