@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.email import send_transaction_email
+from app.core.limits import check_transaction_limits
 from app.models.models import Account, Transaction, TransactionType, TransactionStatus, User
 from app.schemas.transaction import DepositRequest, WithdrawalRequest, TransferRequest, TransactionOut
 
@@ -30,6 +31,11 @@ async def deposit(
     db: AsyncSession = Depends(get_db),
 ):
     account = await _get_owned_account(db, payload.account_id, current_user)
+
+    try:
+        await check_transaction_limits(db, account, payload.amount, is_outgoing=False)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     account.balance += payload.amount
     tx = Transaction(
@@ -66,6 +72,11 @@ async def withdraw(
 
     if account.balance < payload.amount:
         raise HTTPException(status_code=400, detail="Insufficient funds")
+
+    try:
+        await check_transaction_limits(db, account, payload.amount, is_outgoing=True)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     account.balance -= payload.amount
     tx = Transaction(
@@ -110,6 +121,11 @@ async def transfer(
 
     if from_account.balance < payload.amount:
         raise HTTPException(status_code=400, detail="Insufficient funds")
+
+    try:
+        await check_transaction_limits(db, from_account, payload.amount, is_outgoing=True)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     group_id = str(uuid.uuid4())
 
