@@ -6,10 +6,14 @@ from app.agents.deps import ClientAgentDeps
 from app.models.models import Account, Transaction, User, AgentActionLog, AgentActionStatus
 
 
+def mask_account_number(account_number: str) -> str:
+    return f"••••{account_number[-4:]}"
+
+
 async def get_my_accounts(ctx: RunContext[ClientAgentDeps]) -> str:
-    """Get a summary of the client's accounts and balances. Refer to accounts
-    by their account number or type when talking to the client - never
-    mention the internal id."""
+    """Get a summary of the client's accounts and balances. ALWAYS refer to
+    accounts by their nickname when talking to the client - never mention
+    the internal id or full account number."""
     result = await ctx.deps.db.execute(
         select(Account).where(Account.owner_id == ctx.deps.user_id)
     )
@@ -19,21 +23,25 @@ async def get_my_accounts(ctx: RunContext[ClientAgentDeps]) -> str:
 
     lines = []
     for acc in accounts:
+        display_name = acc.nickname or f"{acc.type.value.capitalize()} {mask_account_number(acc.account_number)}"
         lines.append(
-            f"Account {acc.account_number} ({acc.type.value}): "
+            f"{display_name} ({acc.type.value}, {mask_account_number(acc.account_number)}): "
             f"{acc.balance} {acc.currency}"
         )
     return "\n".join(lines)
 
-
-async def get_transaction_history(ctx: RunContext[ClientAgentDeps], account_number: str, limit: int = 10) -> str:
-    """Get recent transaction history for one of the client's accounts, identified by its account number."""
+async def get_transaction_history(ctx: RunContext[ClientAgentDeps], account_nickname: str, limit: int = 10) -> str:
+    """Get recent transaction history for one of the client's accounts,
+    identified by its nickname (e.g. 'Emergency Fund', 'Checking 1')."""
     result = await ctx.deps.db.execute(
-        select(Account).where(Account.account_number == account_number, Account.owner_id == ctx.deps.user_id)
+        select(Account).where(
+            Account.owner_id == ctx.deps.user_id,
+            Account.nickname.ilike(account_nickname),
+        )
     )
     account = result.scalar_one_or_none()
     if not account:
-        return "That account was not found, or does not belong to you."
+        return "I couldn't find an account with that nickname. Ask me to list your accounts if you're not sure of the name."
 
     result = await ctx.deps.db.execute(
         select(Transaction)
@@ -70,30 +78,31 @@ async def propose_transfer(
     ctx: RunContext[ClientAgentDeps],
     from_account_type: str,
     amount: float,
-    to_account_number: str | None = None,
     to_recipient_email: str | None = None,
-    from_account_number: str | None = None,
+    from_account_nickname: str | None = None,
+    to_account_nickname: str | None = None,
 ) -> str:
     """Propose a transfer from one of the client's own accounts to a
     destination. Prefer from_account_type ('checking'/'savings') for the
     client's own account. If the client has multiple accounts of that type,
-    or explicitly gives a specific account number for their own account,
-    use from_account_number instead. The destination can be given either as
-    an account number (if the client knows it) OR as the recipient's email
-    address (look it up automatically). This does NOT execute the transfer
-    immediately - it creates a pending action the client must confirm
-    separately before any money moves."""
+    or explicitly names a specific account, use from_account_nickname
+    instead. The destination is normally the recipient's email address,
+    looked up automatically. If the recipient has multiple accounts, use
+    to_account_nickname (from the list you showed the client) to pick one.
+    NEVER ask for or mention a raw account number - use nicknames and masked
+    numbers only. This does NOT execute the transfer immediately - it
+    creates a pending action the client must confirm separately."""
 
-    if from_account_number:
+    if from_account_nickname:
         result = await ctx.deps.db.execute(
             select(Account).where(
                 Account.owner_id == ctx.deps.user_id,
-                Account.account_number == from_account_number,
+                Account.nickname.ilike(from_account_nickname),
             )
         )
         from_account = result.scalar_one_or_none()
         if not from_account:
-            return "I couldn't find that account, or it doesn't belong to you."
+            return "I couldn't find an account with that nickname."
     else:
         result = await ctx.deps.db.execute(
             select(Account).where(
@@ -106,37 +115,44 @@ async def propose_transfer(
         if not matching_accounts:
             return f"You don't have a {from_account_type} account."
         if len(matching_accounts) > 1:
-            options = ", ".join(a.account_number for a in matching_accounts)
-            return f"You have multiple {from_account_type} accounts ({options}). Which account number should I use?"
+            options = ", ".join(
+                f"{a.nickname} ({mask_account_number(a.account_number)})" for a in matching_accounts
+            )
+            return f"You have multiple {from_account_type} accounts: {options}. Which one should I use?"
 
         from_account = matching_accounts[0]
 
     if from_account.balance < amount:
-        return f"Insufficient funds: account balance is {from_account.balance}, requested {amount}."
+        return f"Insufficient funds: {from_account.nickname} balance is {from_account.balance}, requested {amount}."
+
+    if not to_recipient_email:
+        return "I need the recipient's email to send money to them."
+
+    result = await ctx.deps.db.execute(select(User).where(User.email == to_recipient_email))
+    recipient = result.scalar_one_or_none()
+    if not recipient:
+        return "I couldn't find a client with that email."
+
+    result = await ctx.deps.db.execute(select(Account).where(Account.owner_id == recipient.id))
+    recipient_accounts = result.scalars().all()
+    if not recipient_accounts:
+        return f"{recipient.full_name} doesn't have any accounts yet."
 
     to_account = None
-
-    if to_account_number:
-        result = await ctx.deps.db.execute(select(Account).where(Account.account_number == to_account_number))
-        to_account = result.scalar_one_or_none()
-    elif to_recipient_email:
-        result = await ctx.deps.db.execute(select(User).where(User.email == to_recipient_email))
-        recipient = result.scalar_one_or_none()
-        if not recipient:
-            return "I couldn't find a client with that email."
-        result = await ctx.deps.db.execute(select(Account).where(Account.owner_id == recipient.id))
-        recipient_accounts = result.scalars().all()
-        if not recipient_accounts:
-            return f"{recipient.full_name} doesn't have any accounts yet."
-        if len(recipient_accounts) > 1:
-            options = ", ".join(f"{a.type.value} ({a.account_number})" for a in recipient_accounts)
-            return f"{recipient.full_name} has multiple accounts: {options}. Which one should receive the transfer?"
-        to_account = recipient_accounts[0]
+    if to_account_nickname:
+        to_account = next(
+            (a for a in recipient_accounts if a.nickname and a.nickname.lower() == to_account_nickname.lower()),
+            None,
+        )
+        if not to_account:
+            return f"I couldn't find an account named '{to_account_nickname}' for {recipient.full_name}."
+    elif len(recipient_accounts) > 1:
+        options = ", ".join(
+            f"{a.nickname} ({a.type.value}, {mask_account_number(a.account_number)})" for a in recipient_accounts
+        )
+        return f"{recipient.full_name} has multiple accounts: {options}. Which one should receive the transfer?"
     else:
-        return "I need either the destination account number or the recipient's email."
-
-    if not to_account:
-        return "I couldn't find that destination account."
+        to_account = recipient_accounts[0]
 
     action = AgentActionLog(
         conversation_id=ctx.deps.conversation_id,
@@ -152,9 +168,10 @@ async def propose_transfer(
     await ctx.deps.db.flush()
 
     return (
-        f"I've prepared a transfer of {amount} from account {from_account.account_number} "
-        f"to account {to_account.account_number}. This hasn't been executed yet - "
-        f"please confirm it using action id {action.id} before the money moves."
+        f"I've prepared a transfer of {amount} from your {from_account.nickname} "
+        f"({mask_account_number(from_account.account_number)}) to {recipient.full_name}'s "
+        f"{to_account.nickname} ({mask_account_number(to_account.account_number)}). "
+        f"This hasn't been executed yet - please confirm it using action id {action.id}."
     )
 
 
@@ -173,5 +190,5 @@ async def find_recipient_account(ctx: RunContext[ClientAgentDeps], recipient_ema
 
     lines = [f"{recipient.full_name}'s accounts:"]
     for acc in accounts:
-        lines.append(f"- {acc.type.value} account {acc.account_number}")
+        lines.append(f"- {acc.nickname} ({acc.type.value}, {mask_account_number(acc.account_number)})")
     return "\n".join(lines)
