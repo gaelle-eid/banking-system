@@ -26,9 +26,9 @@ export function AuthProvider({ children }) {
     setUser(meRes.data)
   }
 
-  async function register(formData) {
+async function register(formData) {
     await api.post('/auth/register', { ...formData, role: 'client' })
-    await login(formData.email, formData.password)
+    // no auto-login - user must verify their email first
   }
 
   function logout() {

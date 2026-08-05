@@ -8,6 +8,7 @@ import AccountDetail from './pages/AccountDetail'
 import Loans from './pages/Loans'
 import Assistant from './pages/Assistant'
 import Cards from './pages/Cards'
+import VerifyEmail from './pages/VerifyEmail'
 
 export default function App() {
   return (
@@ -16,7 +17,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-         
+         <Route path="/verify-email" element={<VerifyEmail />} />
          <Route path="/assistant" element={<ProtectedRoute><Assistant /></ProtectedRoute>} /><Route path="/loans" element={<ProtectedRoute><Loans /></ProtectedRoute>} />
 <Route path="/cards" element={<ProtectedRoute><Cards /></ProtectedRoute>} />
           <Route

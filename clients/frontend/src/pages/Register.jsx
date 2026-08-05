@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function Register() {
@@ -15,8 +15,8 @@ export default function Register() {
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [registered, setRegistered] = useState(false)
   const { register } = useAuth()
-  const navigate = useNavigate()
 
   function update(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -28,7 +28,7 @@ export default function Register() {
     setLoading(true)
     try {
       await register(form)
-      navigate('/')
+      setRegistered(true)
     } catch (err) {
       const detail = err.response?.data?.detail
       if (Array.isArray(detail)) {
@@ -43,6 +43,21 @@ export default function Register() {
 
   const inputClass = "w-full px-3 py-2 border border-slate-400/40 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
   const labelClass = "block text-sm font-medium text-ink-900 mb-1"
+
+  if (registered) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-paper-50 px-4">
+        <div className="w-full max-w-sm text-center">
+          <div className="w-12 h-12 bg-teal-500/15 text-teal-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">✉</div>
+          <h1 className="font-display text-xl font-semibold text-ink-900 mb-2">Check your email</h1>
+          <p className="text-slate-600 text-sm mb-6">
+            We've sent a verification link to <strong>{form.email}</strong>. Click it to activate your account, then come back and log in.
+          </p>
+          <Link to="/login" className="text-teal-600 text-sm font-medium">Back to login</Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-paper-50 px-4 py-12">
