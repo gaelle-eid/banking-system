@@ -5,6 +5,8 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import AccountDetail from './pages/AccountDetail'
+import Loans from './pages/Loans'
+import Cards from './pages/Cards'
 
 export default function App() {
   return (
@@ -13,6 +15,8 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+         <Route path="/loans" element={<ProtectedRoute><Loans /></ProtectedRoute>} />
+<Route path="/cards" element={<ProtectedRoute><Cards /></ProtectedRoute>} />
           <Route
             path="/"
             element={
