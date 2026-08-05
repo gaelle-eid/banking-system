@@ -1,16 +1,15 @@
+import json
 from pydantic_ai import RunContext
 from sqlalchemy import select
 
-import json
-from app.models.models import Account, AgentActionLog, AgentActionStatus
-
-
 from app.agents.deps import ClientAgentDeps
-
+from app.models.models import Account, Transaction, User, AgentActionLog, AgentActionStatus
 
 
 async def get_my_accounts(ctx: RunContext[ClientAgentDeps]) -> str:
-    """Get a summary of the client's accounts and balances."""
+    """Get a summary of the client's accounts and balances. Refer to accounts
+    by their account number or type when talking to the client - never
+    mention the internal id."""
     result = await ctx.deps.db.execute(
         select(Account).where(Account.owner_id == ctx.deps.user_id)
     )
@@ -22,15 +21,15 @@ async def get_my_accounts(ctx: RunContext[ClientAgentDeps]) -> str:
     for acc in accounts:
         lines.append(
             f"Account {acc.account_number} ({acc.type.value}): "
-            f"{acc.balance} {acc.currency} [id: {acc.id}]"
+            f"{acc.balance} {acc.currency}"
         )
     return "\n".join(lines)
 
 
-async def get_transaction_history(ctx: RunContext[ClientAgentDeps], account_id: str, limit: int = 10) -> str:
-    """Get recent transaction history for one of the client's accounts."""
+async def get_transaction_history(ctx: RunContext[ClientAgentDeps], account_number: str, limit: int = 10) -> str:
+    """Get recent transaction history for one of the client's accounts, identified by its account number."""
     result = await ctx.deps.db.execute(
-        select(Account).where(Account.id == account_id, Account.owner_id == ctx.deps.user_id)
+        select(Account).where(Account.account_number == account_number, Account.owner_id == ctx.deps.user_id)
     )
     account = result.scalar_one_or_none()
     if not account:
@@ -38,7 +37,7 @@ async def get_transaction_history(ctx: RunContext[ClientAgentDeps], account_id: 
 
     result = await ctx.deps.db.execute(
         select(Transaction)
-        .where(Transaction.account_id == account_id)
+        .where(Transaction.account_id == account.id)
         .order_by(Transaction.created_at.desc())
         .limit(limit)
     )
@@ -54,7 +53,6 @@ async def get_transaction_history(ctx: RunContext[ClientAgentDeps], account_id: 
 
 async def explain_faq(ctx: RunContext[ClientAgentDeps], question: str) -> str:
     """Answer general banking FAQ questions (how transfers work, what a statement is, etc.)."""
-    # Simple static FAQ for now; can be replaced with RAG later like SIS.
     faq = {
         "transfer": "Transfers move money between two accounts. They're recorded as two linked transactions: a debit from the sender and a credit to the receiver.",
         "statement": "A statement summarizes all transactions on an account over a period of time.",
@@ -68,41 +66,53 @@ async def explain_faq(ctx: RunContext[ClientAgentDeps], question: str) -> str:
     return "I don't have a specific answer for that in my FAQ, but I can help you check your accounts, transactions, or submit a request."
 
 
-
 async def propose_transfer(
     ctx: RunContext[ClientAgentDeps],
     from_account_type: str,
     amount: float,
     to_account_number: str | None = None,
     to_recipient_email: str | None = None,
+    from_account_number: str | None = None,
 ) -> str:
     """Propose a transfer from one of the client's own accounts to a
-    destination. from_account_type should be 'checking' or 'savings' -
-    the client's own account, matched by type (never ask for their account
-    number). The destination can be given either as an account number (if
-    the client knows it) OR as the recipient's email address (look it up
-    automatically). This does NOT execute the transfer immediately - it
-    creates a pending action the client must confirm separately before any
-    money moves."""
+    destination. Prefer from_account_type ('checking'/'savings') for the
+    client's own account. If the client has multiple accounts of that type,
+    or explicitly gives a specific account number for their own account,
+    use from_account_number instead. The destination can be given either as
+    an account number (if the client knows it) OR as the recipient's email
+    address (look it up automatically). This does NOT execute the transfer
+    immediately - it creates a pending action the client must confirm
+    separately before any money moves."""
 
-    result = await ctx.deps.db.execute(
-        select(Account).where(
-            Account.owner_id == ctx.deps.user_id,
-            Account.type == from_account_type.lower(),
+    if from_account_number:
+        result = await ctx.deps.db.execute(
+            select(Account).where(
+                Account.owner_id == ctx.deps.user_id,
+                Account.account_number == from_account_number,
+            )
         )
-    )
-    matching_accounts = result.scalars().all()
+        from_account = result.scalar_one_or_none()
+        if not from_account:
+            return "I couldn't find that account, or it doesn't belong to you."
+    else:
+        result = await ctx.deps.db.execute(
+            select(Account).where(
+                Account.owner_id == ctx.deps.user_id,
+                Account.type == from_account_type.lower(),
+            )
+        )
+        matching_accounts = result.scalars().all()
 
-    if not matching_accounts:
-        return f"You don't have a {from_account_type} account."
-    if len(matching_accounts) > 1:
-        options = ", ".join(a.account_number for a in matching_accounts)
-        return f"You have multiple {from_account_type} accounts ({options}). Which account number should I use?"
+        if not matching_accounts:
+            return f"You don't have a {from_account_type} account."
+        if len(matching_accounts) > 1:
+            options = ", ".join(a.account_number for a in matching_accounts)
+            return f"You have multiple {from_account_type} accounts ({options}). Which account number should I use?"
 
-    from_account = matching_accounts[0]
+        from_account = matching_accounts[0]
 
     if from_account.balance < amount:
-        return f"Insufficient funds: your {from_account_type} account balance is {from_account.balance}, requested {amount}."
+        return f"Insufficient funds: account balance is {from_account.balance}, requested {amount}."
 
     to_account = None
 
@@ -142,10 +152,12 @@ async def propose_transfer(
     await ctx.deps.db.flush()
 
     return (
-        f"I've prepared a transfer of {amount} from your {from_account_type} account "
+        f"I've prepared a transfer of {amount} from account {from_account.account_number} "
         f"to account {to_account.account_number}. This hasn't been executed yet - "
         f"please confirm it using action id {action.id} before the money moves."
     )
+
+
 async def find_recipient_account(ctx: RunContext[ClientAgentDeps], recipient_email: str) -> str:
     """Look up another client's account by their email address, so the
     current client doesn't need to know the recipient's account number."""

@@ -1,5 +1,7 @@
+import json
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelMessage
 
 from app.models.models import AgentConversation, AgentMessage, AgentType, AgentMessageRole
 
@@ -20,16 +22,32 @@ async def get_or_create_conversation(db: AsyncSession, user_id: str, agent_type:
     return conversation
 
 
-async def load_history(db: AsyncSession, conversation_id: str) -> list[dict]:
+async def load_message_history(db: AsyncSession, conversation_id: str) -> list[ModelMessage]:
+    """Load prior turns as PydanticAI ModelMessage objects, for passing into Agent.run()."""
     result = await db.execute(
         select(AgentMessage)
         .where(AgentMessage.conversation_id == conversation_id)
         .order_by(AgentMessage.created_at.asc())
     )
-    messages = result.scalars().all()
-    return [{"role": m.role.value, "content": m.content} for m in messages]
+    rows = result.scalars().all()
+
+    history: list[ModelMessage] = []
+    for row in rows:
+        try:
+            parsed = json.loads(row.content)
+            messages = ModelMessagesTypeAdapter.validate_python(parsed)
+            history.extend(messages)
+        except (json.JSONDecodeError, Exception):
+            continue
+    return history
 
 
-async def save_message(db: AsyncSession, conversation_id: str, role: AgentMessageRole, content: str):
-    msg = AgentMessage(conversation_id=conversation_id, role=role, content=content)
+async def save_turn(db: AsyncSession, conversation_id: str, new_messages: list[ModelMessage]):
+    """Save one turn's worth of new messages (user + assistant + any tool calls) as a single row."""
+    serialized = ModelMessagesTypeAdapter.dump_python(new_messages, mode="json")
+    msg = AgentMessage(
+        conversation_id=conversation_id,
+        role=AgentMessageRole.assistant,  # role field kept for schema compat; content holds the full turn
+        content=json.dumps(serialized),
+    )
     db.add(msg)
