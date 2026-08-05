@@ -22,9 +22,22 @@ async def create_account(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    nickname = payload.nickname
+    if not nickname:
+        result = await db.execute(
+            select(Account).where(
+                Account.owner_id == current_user.id,
+                Account.type == payload.type,
+            )
+        )
+        existing_count = len(result.scalars().all())
+        type_label = payload.type.value.capitalize()
+        nickname = f"{type_label} {existing_count + 1}"
+
     account = Account(
         owner_id=current_user.id,
         account_number=generate_account_number(),
+        nickname=nickname,
         type=payload.type,
         currency=payload.currency,
         balance=0,
@@ -33,7 +46,6 @@ async def create_account(
     await db.commit()
     await db.refresh(account)
     return account
-
 
 @router.get("/me", response_model=list[AccountOut])
 async def list_my_accounts(

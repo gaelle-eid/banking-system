@@ -119,6 +119,7 @@ class Account(Base):
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     owner_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
     account_number = Column(String, unique=True, nullable=False)
+    nickname = Column(String, nullable=True)
     type = Column(Enum(AccountType), nullable=False)
     balance = Column(Numeric(14, 2), nullable=False, default=0)
     currency = Column(String, default="USD")
@@ -126,7 +127,6 @@ class Account(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     owner = relationship("User", back_populates="accounts")
-
 
 class Transaction(Base):
     __tablename__ = "transactions"
@@ -236,3 +236,6 @@ class AgentActionLog(Base):
     output = Column(JSON, nullable=True)
     status = Column(Enum(AgentActionStatus), default=AgentActionStatus.pending_approval)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+
