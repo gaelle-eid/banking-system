@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
 
     pydantic_ai_gateway_api_key: str = ""
-
+    resend_api_key: str = ""
     class Config:
         env_file = "../.env"  # backend/ -> project root .env
         extra = "ignore"
