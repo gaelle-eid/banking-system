@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, accounts, transactions, loans, cards, statements, agent
-
+from app.routers import auth, accounts, transactions, loans, cards, statements, agent, approvals, audit, employees, reports, admin
 app = FastAPI(title="Banking System API")
 
 app.add_middleware(
@@ -19,6 +18,11 @@ app.include_router(loans.router)
 app.include_router(cards.router)
 app.include_router(statements.router)
 app.include_router(agent.router)
+app.include_router(approvals.router)
+app.include_router(audit.router)
+app.include_router(employees.router)
+app.include_router(reports.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")

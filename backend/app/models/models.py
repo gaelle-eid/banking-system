@@ -97,6 +97,10 @@ class AgentActionStatus(str, enum.Enum):
     executed = "executed"
     rejected = "rejected"
 
+class EmployeeStatus(str, enum.Enum):
+    active = "active"
+    on_leave = "on_leave"
+    terminated = "terminated"
 
 # ---------- Core ----------
 
@@ -244,3 +248,19 @@ class AgentActionLog(Base):
     output = Column(JSON, nullable=True)
     status = Column(Enum(AgentActionStatus), default=AgentActionStatus.pending_approval)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EmployeeProfile(Base):
+    __tablename__ = "employee_profiles"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), unique=True, nullable=False)
+    employee_id = Column(String, unique=True, nullable=False)
+    department = Column(String, nullable=False)
+    branch = Column(String, nullable=False)
+    job_title = Column(String, nullable=False)
+    hire_date = Column(DateTime, nullable=False)
+    status = Column(Enum(EmployeeStatus), default=EmployeeStatus.active)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
