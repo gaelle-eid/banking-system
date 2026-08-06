@@ -66,7 +66,23 @@ export default function Layout({ children }) {
         </div>
       </aside>
 
-      <main className="flex-1 p-8 overflow-y-auto">{children}</main>
+<main className="flex-1 p-8 overflow-y-auto flex flex-col">
+        <div className="flex-1">{children}</div>
+        <footer className="mt-12 pt-6 border-t border-stone-300/30 flex justify-between items-center text-xs text-stone-500">
+          <div className="flex items-center gap-1.5">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+              <rect x="5" y="11" width="14" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.8"/>
+              <path d="M8 11V7a4 4 0 118 0v4" stroke="currentColor" strokeWidth="1.8"/>
+            </svg>
+            Bank-level encryption · Your data is protected
+          </div>
+          <div className="flex gap-4">
+            <span className="hover:text-ink-950 cursor-pointer transition">Privacy Policy</span>
+            <span className="hover:text-ink-950 cursor-pointer transition">Terms of Service</span>
+            <span className="hover:text-ink-950 cursor-pointer transition">Support</span>
+          </div>
+        </footer>
+      </main>
     </div>
   )
 }

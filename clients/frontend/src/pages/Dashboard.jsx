@@ -5,6 +5,8 @@ import Layout from '../components/Layout'
 import AccountCard from '../components/AccountCard'
 import { formatMoney, formatDate } from '../lib/format'
 import SpendingChart from '../components/SpendingChart'
+import { useAuth } from '../context/AuthContext'
+
 const quickActions = [
   { label: 'Deposit', icon: 'M12 19V5M5 12l7-7 7 7' },
   { label: 'Transfer', icon: 'M7 7h13M7 7l4-4M7 7l4 4M17 17H4M17 17l-4 4M17 17l-4-4' },
@@ -17,6 +19,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   async function loadAccounts() {
     const res = await api.get('/accounts/me')
@@ -65,7 +68,14 @@ export default function Dashboard() {
     <Layout>
       {/* Hero balance */}
       <div className="mb-6">
-        <p className="text-stone-500 text-sm mb-1">Total balance</p>
+        <div className="flex justify-between items-start">
+          <p className="text-stone-500 text-sm mb-1">Total balance</p>
+          {user?.last_login_at && (
+            <p className="text-xs text-stone-500">
+             Last login: {new Date(user.last_login_at + 'Z').toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            </p>
+          )}
+        </div>
         {loading ? (
           <div className="h-14 w-64 bg-stone-300/20 rounded-lg animate-pulse" />
         ) : (

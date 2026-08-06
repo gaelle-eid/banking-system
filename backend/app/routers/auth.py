@@ -1,4 +1,5 @@
 import secrets
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -104,6 +105,9 @@ async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)):
 
     if not user.is_verified:
         raise HTTPException(status_code=403, detail="Please verify your email before logging in")
+
+    user.last_login_at = datetime.utcnow()
+    await db.commit()
 
     token = create_access_token(data={"sub": user.id, "role": user.role.value})
     return TokenResponse(access_token=token)

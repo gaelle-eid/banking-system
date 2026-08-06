@@ -2,6 +2,7 @@ import re
 from datetime import date
 from pydantic import BaseModel, EmailStr, field_validator
 from app.models.models import UserRole
+from datetime import datetime as dt
 
 
 class UserRegister(BaseModel):
@@ -81,6 +82,7 @@ class UserOut(BaseModel):
     phone: str | None
     address: str | None
     role: UserRole
+    last_login_at: dt | None
 
     class Config:
         from_attributes = True
