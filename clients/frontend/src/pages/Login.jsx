@@ -16,7 +16,7 @@ export default function Login() {
     setLoading(true)
     try {
       await login(email, password)
-      navigate('/')
+      navigate('/dashboard')
     } catch (err) {
       setError(err.response?.data?.detail || 'Login failed')
     } finally {
@@ -58,7 +58,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-ink-950 text-white py-2.5 rounded-lg font-medium hover:bg-ink-900 transition disabled:opacity-50"
+            className="w-full bg-ink-950 text-white py-2.5 rounded-lg font-medium hover:bg-ink-800 transition disabled:opacity-50"
           >
             {loading ? 'Signing in...' : 'Sign in'}
           </button>

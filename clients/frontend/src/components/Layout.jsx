@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 const navItems = [
-  { path: '/', label: 'Dashboard', icon: (props) => (
+  { path: '/dashboard', label: 'Dashboard', icon: (props) => (
     <svg {...props} viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.8"/><rect x="14" y="3" width="7" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.8"/><rect x="14" y="12" width="7" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.8"/><rect x="3" y="16" width="7" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.8"/></svg>
   )},
   { path: '/loans', label: 'Loans', icon: (props) => (
@@ -66,7 +66,7 @@ export default function Layout({ children }) {
         </div>
       </aside>
 
-<main className="flex-1 p-8 overflow-y-auto flex flex-col">
+      <main className="flex-1 p-8 overflow-y-auto flex flex-col">
         <div className="flex-1">{children}</div>
         <footer className="mt-12 pt-6 border-t border-stone-300/30 flex justify-between items-center text-xs text-stone-500">
           <div className="flex items-center gap-1.5">
