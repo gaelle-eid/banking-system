@@ -11,6 +11,9 @@ const navItems = [
   { path: '/cards', label: 'Cards', icon: (props) => (
     <svg {...props} viewBox="0 0 24 24" fill="none"><rect x="2" y="5" width="20" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.8"/><path d="M2 10h20" stroke="currentColor" strokeWidth="1.8"/></svg>
   )},
+  { path: '/statements', label: 'Statements', icon: (props) => (
+    <svg {...props} viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.8"/><path d="M14 2v6h6M8 13h8M8 17h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+  )},
   { path: '/assistant', label: 'Assistant', icon: (props) => (
     <svg {...props} viewBox="0 0 24 24" fill="none"><path d="M12 3a7 7 0 00-7 7c0 2.1.9 3.98 2.34 5.29L7 21l4.2-1.6c.26.03.53.05.8.05a7 7 0 000-14z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="12" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/></svg>
   )},
