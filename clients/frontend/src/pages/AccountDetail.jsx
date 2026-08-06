@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import Layout from '../components/Layout'
 import { formatMoney, formatDate } from '../lib/format'
+import { useToast } from '../context/ToastContext'
 
 export default function AccountDetail() {
   const { id } = useParams()
@@ -18,6 +19,7 @@ export default function AccountDetail() {
   const [transferTo, setTransferTo] = useState('')
   const [actionError, setActionError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const { showToast } = useToast()
 
   async function loadData() {
     const [accRes, txRes, allAccRes] = await Promise.all([
@@ -43,8 +45,11 @@ export default function AccountDetail() {
       await api.post('/transactions/deposit', { account_id: id, amount: parseFloat(depositAmount) })
       setDepositAmount('')
       await loadData()
+      showToast('Deposit successful')
     } catch (err) {
-      setActionError(err.response?.data?.detail || 'Deposit failed')
+      const msg = err.response?.data?.detail || 'Deposit failed'
+      setActionError(msg)
+      showToast(msg, 'error')
     } finally {
       setActionLoading(false)
     }
@@ -58,8 +63,11 @@ export default function AccountDetail() {
       await api.post('/transactions/withdraw', { account_id: id, amount: parseFloat(withdrawAmount) })
       setWithdrawAmount('')
       await loadData()
+      showToast('Withdrawal successful')
     } catch (err) {
-      setActionError(err.response?.data?.detail || 'Withdrawal failed')
+      const msg = err.response?.data?.detail || 'Withdrawal failed'
+      setActionError(msg)
+      showToast(msg, 'error')
     } finally {
       setActionLoading(false)
     }
@@ -78,8 +86,11 @@ export default function AccountDetail() {
       setTransferAmount('')
       setTransferTo('')
       await loadData()
+      showToast('Transfer successful')
     } catch (err) {
-      setActionError(err.response?.data?.detail || 'Transfer failed')
+      const msg = err.response?.data?.detail || 'Transfer failed'
+      setActionError(msg)
+      showToast(msg, 'error')
     } finally {
       setActionLoading(false)
     }
