@@ -49,3 +49,30 @@ A transfer between two accounts creates **two** transaction rows (one debit,
 one credit), linked by a shared `transfer_group_id`. This mirrors standard
 accounting practice and keeps every transaction row describing exactly one
 account's movement, simplifying history queries and audit logging.
+
+
+## Architecture Overview
+┌─────────────────────┐ ┌─────────────────────┐
+│ Client Portal │ │ Employee Portal │
+│ React · :5173 │ │ React · :5174 │
+└──────────┬───────────┘ └──────────┬───────────┘
+│ │
+└────────────┬───────────────┘
+▼
+┌───────────────────────┐
+│ FastAPI Backend │
+│ Python · :8000 │
+│ RBAC (client/employee/admin)
+└───────────┬─────────────┘
+│
+┌────────────┴─────────────┐
+▼ ▼
+┌─────────────────┐ ┌──────────────────┐
+│ PostgreSQL │ │ External services │
+│ :5433 │ │ Resend (email) │
+└─────────────────┘ │ Pydantic AI Gateway │
+│ (GPT-5.2) │
+└──────────────────┘
+
+Both frontends are independent React apps, but they share **one backend and one database** — not separate systems. This is deliberate: a client's transfer and an employee's review of that same account need to see identical, real-time data. Role-based access control (RBAC), not data duplication, is what separates what each portal can see and do. See "Database Sharing Model" below for the full reasoning.
+

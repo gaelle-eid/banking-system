@@ -12,4 +12,3 @@ async def log_action(db: AsyncSession, actor_id: str, action: str, entity_type: 
     )
     db.add(entry)
 
-    

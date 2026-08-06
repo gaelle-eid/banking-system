@@ -11,3 +11,6 @@ export default function StatCard({ label, value, icon, accent = false }) {
     </div>
   )
 }
+
+
+
