@@ -41,19 +41,19 @@ export default function Register() {
     }
   }
 
-  const inputClass = "w-full px-3 py-2 border border-slate-400/40 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-  const labelClass = "block text-sm font-medium text-ink-900 mb-1"
+  const inputClass = "w-full px-3 py-2 border border-stone-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-crimson-600"
+  const labelClass = "block text-sm font-medium text-ink-950 mb-1"
 
   if (registered) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-paper-50 px-4">
         <div className="w-full max-w-sm text-center">
-          <div className="w-12 h-12 bg-teal-500/15 text-teal-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">✉</div>
-          <h1 className="font-display text-xl font-semibold text-ink-900 mb-2">Check your email</h1>
-          <p className="text-slate-600 text-sm mb-6">
+          <div className="w-12 h-12 bg-crimson-100 text-crimson-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">✉</div>
+          <h1 className="font-display text-xl font-semibold text-ink-950 mb-2">Check your email</h1>
+          <p className="text-stone-500 text-sm mb-6">
             We've sent a verification link to <strong>{form.email}</strong>. Click it to activate your account, then come back and log in.
           </p>
-          <Link to="/login" className="text-teal-600 text-sm font-medium">Back to login</Link>
+          <Link to="/login" className="text-crimson-600 text-sm font-medium">Back to login</Link>
         </div>
       </div>
     )
@@ -62,8 +62,9 @@ export default function Register() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-paper-50 px-4 py-12">
       <div className="w-full max-w-md">
-        <h1 className="font-display text-2xl font-semibold text-ink-900 mb-1">Create your account</h1>
-        <p className="text-slate-600 text-sm mb-8">Start banking with us.</p>
+        <div className="w-9 h-9 rounded-md bg-crimson-600 flex items-center justify-center font-display font-bold text-sm text-white mb-6">B</div>
+        <h1 className="font-display text-2xl font-semibold text-ink-950 mb-1">Create your account</h1>
+        <p className="text-stone-500 text-sm mb-8">Start banking with us.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -95,33 +96,33 @@ export default function Register() {
           <div>
             <label className={labelClass}>Password</label>
             <input type="password" required value={form.password} onChange={(e) => update('password', e.target.value)} className={inputClass} />
-            <p className="text-xs text-slate-400 mt-1">At least 8 characters, with uppercase, lowercase, a number, and a symbol.</p>
+            <p className="text-xs text-stone-500 mt-1">At least 8 characters, with uppercase, lowercase, a number, and a symbol.</p>
           </div>
 
-          <label className="flex items-start gap-2 text-sm text-slate-600">
+          <label className="flex items-start gap-2 text-sm text-stone-500">
             <input
               type="checkbox"
               required
               checked={form.accepted_terms}
               onChange={(e) => update('accepted_terms', e.target.checked)}
-              className="mt-0.5"
+              className="mt-0.5 accent-crimson-600"
             />
             I agree to the Terms and Conditions and Privacy Policy.
           </label>
 
-          {error && <p className="text-coral-500 text-sm">{error}</p>}
+          {error && <p className="text-crimson-600 text-sm">{error}</p>}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-ink-900 text-white py-2.5 rounded-lg font-medium hover:bg-ink-800 transition disabled:opacity-50"
+            className="w-full bg-ink-950 text-white py-2.5 rounded-lg font-medium hover:bg-ink-900 transition disabled:opacity-50"
           >
             {loading ? 'Creating account...' : 'Create account'}
           </button>
         </form>
 
-        <p className="text-sm text-slate-600 mt-6">
-          Already have an account? <Link to="/login" className="text-teal-600 font-medium">Sign in</Link>
+        <p className="text-sm text-stone-500 mt-6">
+          Already have an account? <Link to="/login" className="text-crimson-600 font-medium">Sign in</Link>
         </p>
       </div>
     </div>

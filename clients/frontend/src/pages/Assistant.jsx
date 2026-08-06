@@ -16,7 +16,7 @@ export default function Assistant() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
- function extractActionId(text) {
+  function extractActionId(text) {
     const match = text.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i)
     return match ? match[0] : null
   }
@@ -79,29 +79,29 @@ export default function Assistant() {
 
   return (
     <Layout>
-      <h1 className="font-display text-2xl font-semibold text-ink-900 mb-6">Assistant</h1>
+      <h1 className="font-display text-2xl font-semibold text-ink-950 mb-6">Assistant</h1>
 
-      <div className="bg-white rounded-2xl border border-slate-400/20 flex flex-col h-[calc(100vh-180px)] max-w-2xl">
+      <div className="bg-white rounded-2xl border border-stone-300/40 flex flex-col h-[calc(100vh-180px)] max-w-2xl">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-             <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
-  msg.role === 'user' ? 'bg-ink-900 text-white' : 'bg-paper-50 text-ink-900'
-}`}>
-  <div className="prose prose-sm max-w-none [&_p]:m-0 [&_strong]:font-semibold">
-    <ReactMarkdown>{msg.content}</ReactMarkdown>
-  </div>
+              <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
+                msg.role === 'user' ? 'bg-ink-950 text-white' : 'bg-paper-50 text-ink-950'
+              }`}>
+                <div className="prose prose-sm max-w-none [&_p]:m-0 [&_strong]:font-semibold">
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
                 {pendingActions[i] && (
                   <div className="flex gap-2 mt-3">
                     <button
                       onClick={() => handleConfirm(i, pendingActions[i])}
-                      className="px-3 py-1.5 bg-teal-500 text-white rounded-lg text-xs font-medium hover:bg-teal-600 transition"
+                      className="px-3 py-1.5 bg-crimson-600 text-white rounded-lg text-xs font-medium hover:bg-crimson-700 transition"
                     >
                       Confirm
                     </button>
                     <button
                       onClick={() => handleReject(i, pendingActions[i])}
-                      className="px-3 py-1.5 border border-slate-400/40 text-ink-900 rounded-lg text-xs font-medium hover:bg-white transition"
+                      className="px-3 py-1.5 border border-stone-300 text-ink-950 rounded-lg text-xs font-medium hover:bg-white transition"
                     >
                       Cancel
                     </button>
@@ -112,24 +112,24 @@ export default function Assistant() {
           ))}
           {loading && (
             <div className="flex justify-start">
-              <div className="bg-paper-50 rounded-2xl px-4 py-2.5 text-sm text-slate-400">Thinking...</div>
+              <div className="bg-paper-50 rounded-2xl px-4 py-2.5 text-sm text-stone-500">Thinking...</div>
             </div>
           )}
           <div ref={bottomRef} />
         </div>
 
-        <form onSubmit={sendMessage} className="border-t border-slate-400/20 p-3 flex gap-2">
+        <form onSubmit={sendMessage} className="border-t border-stone-300/40 p-3 flex gap-2">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask about your accounts, or request a transfer..."
-            className="flex-1 px-3 py-2 border border-slate-400/40 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+            className="flex-1 px-3 py-2 border border-stone-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-crimson-600"
           />
           <button
             type="submit"
             disabled={loading}
-            className="px-4 py-2 bg-teal-500 text-white rounded-lg text-sm font-medium hover:bg-teal-600 transition disabled:opacity-50"
+            className="px-4 py-2 bg-crimson-600 text-white rounded-lg text-sm font-medium hover:bg-crimson-700 transition disabled:opacity-50"
           >
             Send
           </button>
