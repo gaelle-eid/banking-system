@@ -4,7 +4,7 @@ import api from '../lib/api'
 import Layout from '../components/Layout'
 import AccountCard from '../components/AccountCard'
 import { formatMoney, formatDate } from '../lib/format'
-
+import SpendingChart from '../components/SpendingChart'
 const quickActions = [
   { label: 'Deposit', icon: 'M12 19V5M5 12l7-7 7 7' },
   { label: 'Transfer', icon: 'M7 7h13M7 7l4-4M7 7l4 4M17 17H4M17 17l-4 4M17 17l-4-4' },
@@ -133,6 +133,14 @@ export default function Dashboard() {
               <AccountCard account={account} />
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Spending chart */}
+      {!loading && recentActivity.length > 0 && (
+        <div className="mb-8">
+          <h2 className="font-display text-lg font-semibold text-ink-950 mb-4">Activity overview</h2>
+          <SpendingChart transactions={recentActivity} />
         </div>
       )}
 
