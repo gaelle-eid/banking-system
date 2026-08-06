@@ -11,6 +11,7 @@ import Assistant from './pages/Assistant'
 import Cards from './pages/Cards'
 import VerifyEmail from './pages/VerifyEmail'
 import Statements from './pages/Statements'
+import Profile from './pages/Profile'
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/loans" element={<ProtectedRoute><Loans /></ProtectedRoute>} />
           <Route path="/cards" element={<ProtectedRoute><Cards /></ProtectedRoute>} />
           <Route path="/statements" element={<ProtectedRoute><Statements /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route
             path="/"
             element={

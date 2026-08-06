@@ -53,12 +53,12 @@ export default function Layout({ children }) {
           })}
         </nav>
 
-<div className="px-6 py-4 border-t border-ink-900 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-crimson-600 flex items-center justify-center font-display font-semibold text-sm shrink-0">
+        <div className="px-6 py-4 border-t border-ink-900 flex items-center gap-3">
+          <Link to="/profile" className="w-9 h-9 rounded-full bg-crimson-600 flex items-center justify-center font-display font-semibold text-sm shrink-0 hover:opacity-80 transition">
             {user?.full_name?.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()}
-          </div>
+          </Link>
           <div className="min-w-0">
-            <p className="text-sm font-medium truncate">{user?.full_name}</p>
+            <Link to="/profile" className="text-sm font-medium truncate block hover:text-crimson-600 transition">{user?.full_name}</Link>
             <button onClick={logout} className="text-xs text-stone-300 hover:text-white">
               Sign out
             </button>
