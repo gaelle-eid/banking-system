@@ -1,14 +1,22 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import Layout from '../components/Layout'
 import AccountCard from '../components/AccountCard'
 import { formatMoney, formatDate } from '../lib/format'
+
+const quickActions = [
+  { label: 'Deposit', icon: 'M12 19V5M5 12l7-7 7 7' },
+  { label: 'Transfer', icon: 'M7 7h13M7 7l4-4M7 7l4 4M17 17H4M17 17l-4 4M17 17l-4-4' },
+  { label: 'Request card', icon: 'M2 5h20M2 5v14a2 2 0 002 2h16a2 2 0 002-2V5M2 5a2 2 0 012-2h16a2 2 0 012 2' },
+]
 
 export default function Dashboard() {
   const [accounts, setAccounts] = useState([])
   const [recentActivity, setRecentActivity] = useState([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const navigate = useNavigate()
 
   async function loadAccounts() {
     const res = await api.get('/accounts/me')
@@ -40,13 +48,23 @@ export default function Dashboard() {
     }
   }
 
+  function handleQuickAction(label) {
+    if (label === 'Request card') {
+      navigate('/cards')
+      return
+    }
+    if (accounts.length > 0) {
+      navigate(`/accounts/${accounts[0].id}`)
+    }
+  }
+
   const totalBalance = accounts.reduce((sum, a) => sum + parseFloat(a.balance), 0)
   const currency = accounts[0]?.currency || 'USD'
 
   return (
     <Layout>
       {/* Hero balance */}
-      <div className="mb-10">
+      <div className="mb-6">
         <p className="text-stone-500 text-sm mb-1">Total balance</p>
         {loading ? (
           <div className="h-14 w-64 bg-stone-300/20 rounded-lg animate-pulse" />
@@ -58,6 +76,22 @@ export default function Dashboard() {
         <p className="text-stone-500 text-sm mt-2">
           Across {accounts.length} account{accounts.length !== 1 ? 's' : ''}
         </p>
+      </div>
+
+      {/* Quick actions */}
+      <div className="flex gap-3 mb-10">
+        {quickActions.map((action) => (
+          <button
+            key={action.label}
+            onClick={() => handleQuickAction(action.label)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-stone-300/40 rounded-xl text-sm font-medium text-ink-950 hover:border-crimson-600 hover:text-crimson-600 transition"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d={action.icon} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            {action.label}
+          </button>
+        ))}
       </div>
 
       {/* Account cards */}
@@ -82,7 +116,11 @@ export default function Dashboard() {
       </div>
 
       {loading ? (
-        <p className="text-stone-500 mb-10">Loading accounts...</p>
+        <div className="flex gap-4 mb-10">
+          {[1, 2].map((i) => (
+            <div key={i} className="w-72 h-40 shrink-0 bg-stone-300/20 rounded-2xl animate-pulse" />
+          ))}
+        </div>
       ) : accounts.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 text-center border border-stone-300/40 mb-10">
           <p className="text-stone-500">You don't have any accounts yet.</p>
@@ -101,7 +139,20 @@ export default function Dashboard() {
       {/* Activity feed */}
       <h2 className="font-display text-lg font-semibold text-ink-950 mb-4">Recent activity</h2>
       {loading ? (
-        <p className="text-stone-500">Loading...</p>
+        <div className="bg-white rounded-xl border border-stone-300/40 divide-y divide-stone-300/30">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex justify-between items-center px-4 py-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-stone-300/20 animate-pulse" />
+                <div>
+                  <div className="h-3.5 w-24 bg-stone-300/20 rounded animate-pulse mb-1.5" />
+                  <div className="h-3 w-32 bg-stone-300/20 rounded animate-pulse" />
+                </div>
+              </div>
+              <div className="h-4 w-16 bg-stone-300/20 rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
       ) : recentActivity.length === 0 ? (
         <p className="text-stone-500 text-sm">No recent activity.</p>
       ) : (
