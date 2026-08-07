@@ -31,7 +31,7 @@ export default function Reports() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <StatCard label="Total accounts" value={summary.total_accounts} icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="9" rx="1.5" stroke="currentColor" strokeWidth="2"/><rect x="14" y="12" width="7" height="9" rx="1.5" stroke="currentColor" strokeWidth="2"/></svg>} />
-        <StatCard label="Total balance" value={formatMoney(summary.total_balance)} icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>} />
+        <StatCard label="Total client deposits" value={formatMoney(summary.total_balance)} icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>} />
         <StatCard label="Active loans" value={summary.active_loans} icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>} />
         <StatCard label="Active cards" value={summary.active_cards} icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="2" y="5" width="20" height="14" rx="2.5" stroke="currentColor" strokeWidth="2"/></svg>} />
       </div>

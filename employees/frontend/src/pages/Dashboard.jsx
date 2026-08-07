@@ -44,7 +44,7 @@ export default function Dashboard() {
             icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 8v4l3 3" stroke="white" strokeWidth="2" strokeLinecap="round"/><circle cx="12" cy="12" r="9" stroke="white" strokeWidth="2"/></svg>}
           />
           <StatCard
-            label="Total balance"
+            label="Total client deposits"
             value={formatMoney(summary.total_balance)}
             icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>}
           />

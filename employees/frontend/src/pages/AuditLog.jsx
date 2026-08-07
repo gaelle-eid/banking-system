@@ -27,9 +27,13 @@ export default function AuditLog() {
 
   return (
     <Layout>
-      <div className="mb-6">
+<div className="mb-6">
         <h1 className="font-display text-2xl font-semibold text-steel-900">Audit Log</h1>
-        <p className="text-slate-500 text-sm mt-1">Every approval and rejection, in order.</p>
+        <p className="text-slate-500 text-sm mt-1">Every client and staff action, in order.</p>
+        <div className="mt-3 flex items-start gap-2 bg-amber-100 text-amber-500 rounded-lg px-3 py-2 text-xs max-w-xl">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0 mt-0.5"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8"/><path d="M12 8v5M12 16h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+          <span>A record of every action taken by clients or staff — requests, approvals, rejections, closures, cancellations. Used for compliance and internal accountability. Clients don't have visibility into this.</span>
+        </div>
       </div>
 
       <div className="flex gap-2 mb-6">
