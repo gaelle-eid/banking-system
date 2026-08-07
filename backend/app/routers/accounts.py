@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.audit import log_action
 from app.models.models import Account, AccountStatus, User
 from app.schemas.account import AccountCreate, AccountOut
 
@@ -99,6 +100,10 @@ async def close_account(
         )
 
     account.status = AccountStatus.closed
+    await log_action(
+        db, current_user.id, "closed", "account", account.id,
+        details={"account_number": account.account_number, "nickname": account.nickname},
+    )
     await db.commit()
     await db.refresh(account)
     return account

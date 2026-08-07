@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.audit import log_action
 from app.models.models import Card, Account, Approval, ApprovalEntityType, ApprovalStatus, CardStatus, User
 from app.schemas.card import CardRequest, CardOut
 
@@ -81,6 +82,10 @@ async def cancel_card(
         raise HTTPException(status_code=400, detail=f"Card is already {card.status.value}")
 
     card.status = CardStatus.blocked
+    await log_action(
+        db, current_user.id, "cancelled", "card", card.id,
+        details={"masked_number": card.masked_number},
+    )
     await db.commit()
     await db.refresh(card)
     return card
