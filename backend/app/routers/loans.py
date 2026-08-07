@@ -4,6 +4,7 @@ from sqlalchemy import select
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.audit import log_action
 from app.models.models import Loan, Approval, ApprovalEntityType, ApprovalStatus, User
 from app.schemas.loan import LoanRequest, LoanOut
 
@@ -32,6 +33,11 @@ async def request_loan(
         status=ApprovalStatus.pending,
     )
     db.add(approval)
+
+    await log_action(
+        db, current_user.id, "requested", "loan", loan.id,
+        details={"amount": str(payload.amount), "term_months": payload.term_months},
+    )
 
     await db.commit()
     await db.refresh(loan)

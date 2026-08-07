@@ -6,6 +6,27 @@ import { formatDateTime } from '../lib/format'
 const actionStyles = {
   approve: 'bg-emerald-100 text-emerald-600',
   reject: 'bg-crimson-100 text-crimson-600',
+  requested: 'bg-amber-100 text-amber-500',
+  closed: 'bg-slate-300/30 text-slate-500',
+  cancelled: 'bg-slate-300/30 text-slate-500',
+}
+
+function summarizeDetails(log) {
+  const d = log.details
+  if (!d) return null
+  if (log.entity_type === 'loan' && d.amount) {
+    return `$${d.amount} · ${d.term_months} months`
+  }
+  if (log.entity_type === 'card' && d.type) {
+    return `${d.type} card`
+  }
+  if (log.entity_type === 'account' && d.nickname) {
+    return d.nickname
+  }
+  if (d.notes) {
+    return `"${d.notes}"`
+  }
+  return null
 }
 
 export default function AuditLog() {
@@ -27,7 +48,7 @@ export default function AuditLog() {
 
   return (
     <Layout>
-<div className="mb-6">
+      <div className="mb-6">
         <h1 className="font-display text-2xl font-semibold text-steel-900">Audit Log</h1>
         <p className="text-slate-500 text-sm mt-1">Every client and staff action, in order.</p>
         <div className="mt-3 flex items-start gap-2 bg-amber-100 text-amber-500 rounded-lg px-3 py-2 text-xs max-w-xl">
@@ -37,7 +58,7 @@ export default function AuditLog() {
       </div>
 
       <div className="flex gap-2 mb-6">
-        {['', 'loan', 'card'].map((v) => (
+        {['', 'loan', 'card', 'account'].map((v) => (
           <button
             key={v}
             onClick={() => setEntityFilter(v)}
@@ -58,20 +79,25 @@ export default function AuditLog() {
         <p className="text-slate-500 text-sm">No audit entries yet.</p>
       ) : (
         <div className="bg-white rounded-xl border border-slate-300/40 divide-y divide-slate-300/30">
-          {logs.map((log) => (
-            <div key={log.id} className="flex justify-between items-center px-4 py-3">
-              <div className="flex items-center gap-3">
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${actionStyles[log.action] || 'bg-slate-300/30 text-slate-500'}`}>
-                  {log.action}
-                </span>
-                <div>
-                  <p className="text-sm font-medium capitalize text-steel-900">{log.entity_type} · {log.entity_id.slice(0, 8)}</p>
-                  {log.details?.notes && <p className="text-xs text-slate-500">"{log.details.notes}"</p>}
+          {logs.map((log) => {
+            const summary = summarizeDetails(log)
+            return (
+              <div key={log.id} className="flex justify-between items-center px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize shrink-0 ${actionStyles[log.action] || 'bg-slate-300/30 text-slate-500'}`}>
+                    {log.action}
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium text-steel-900">
+                      <span className="capitalize">{log.entity_type}</span> · {log.actor_name || 'Unknown'}
+                    </p>
+                    {summary && <p className="text-xs text-slate-500">{summary}</p>}
+                  </div>
                 </div>
+                <p className="text-xs text-slate-500 font-mono shrink-0">{formatDateTime(log.created_at)}</p>
               </div>
-              <p className="text-xs text-slate-500 font-mono">{formatDateTime(log.created_at)}</p>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </Layout>

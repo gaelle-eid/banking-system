@@ -5,7 +5,7 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.core.deps import require_role
-from app.models.models import AuditLog, UserRole
+from app.models.models import AuditLog, User, UserRole
 from app.schemas.audit import AuditLogOut
 
 router = APIRouter(prefix="/audit-logs", tags=["audit"])
@@ -28,4 +28,14 @@ async def list_audit_logs(
     query = query.order_by(AuditLog.created_at.desc())
 
     result = await db.execute(query)
-    return result.scalars().all()
+    logs = result.scalars().all()
+
+    output = []
+    for log in logs:
+        user_result = await db.execute(select(User).where(User.id == log.actor_id))
+        user = user_result.scalar_one_or_none()
+        log_out = AuditLogOut.model_validate(log)
+        log_out.actor_name = user.full_name if user else "Unknown"
+        output.append(log_out)
+
+    return output

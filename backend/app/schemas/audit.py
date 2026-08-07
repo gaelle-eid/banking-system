@@ -6,6 +6,7 @@ from typing import Any
 class AuditLogOut(BaseModel):
     id: str
     actor_id: str
+    actor_name: str | None = None
     action: str
     entity_type: str
     entity_id: str

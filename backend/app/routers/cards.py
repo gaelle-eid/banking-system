@@ -50,6 +50,11 @@ async def request_card(
     )
     db.add(approval)
 
+    await log_action(
+        db, current_user.id, "requested", "card", card.id,
+        details={"type": payload.type.value},
+    )
+
     await db.commit()
     await db.refresh(card)
     return card
