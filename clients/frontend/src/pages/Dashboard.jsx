@@ -17,7 +17,10 @@ export default function Dashboard() {
   const [accounts, setAccounts] = useState([])
   const [recentActivity, setRecentActivity] = useState([])
   const [loading, setLoading] = useState(true)
-  const [creating, setCreating] = useState(false)
+const [creating, setCreating] = useState(false)
+  const [showAddAccount, setShowAddAccount] = useState(false)
+  const [newAccountType, setNewAccountType] = useState('checking')
+  const [newAccountNickname, setNewAccountNickname] = useState('')
   const navigate = useNavigate()
   const { user } = useAuth()
 
@@ -41,15 +44,22 @@ const txResults = await Promise.all(
     loadAccounts()
   }, [])
 
-  async function handleCreateAccount(type) {
+async function handleCreateAccount(e) {
+    e.preventDefault()
     setCreating(true)
     try {
-      await api.post('/accounts', { type, currency: 'USD' })
+      await api.post('/accounts', {
+        type: newAccountType,
+        currency: 'USD',
+        nickname: newAccountNickname.trim() || undefined,
+      })
+      setNewAccountNickname('')
+      setShowAddAccount(false)
       await loadAccounts()
     } finally {
       setCreating(false)
     }
-  }
+  }  
 
   function handleQuickAction(label) {
     if (label === 'Request card') {
@@ -105,26 +115,66 @@ const activeAccounts = accounts.filter((a) => a.status === 'active')
         ))}
       </div>
 
-      {/* Account cards */}
+
+{/* Account cards */}
       <div className="flex justify-between items-center mb-4">
         <h2 className="font-display text-lg font-semibold text-ink-950">Your accounts</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={() => handleCreateAccount('checking')}
-            disabled={creating}
-            className="px-3 py-1.5 bg-crimson-600 text-white rounded-lg text-xs font-medium hover:bg-crimson-700 transition disabled:opacity-50"
-          >
-            + Checking
-          </button>
-          <button
-            onClick={() => handleCreateAccount('savings')}
-            disabled={creating}
-            className="px-3 py-1.5 border border-stone-300 text-ink-950 rounded-lg text-xs font-medium hover:bg-white transition disabled:opacity-50"
-          >
-            + Savings
-          </button>
-        </div>
+        <button
+          onClick={() => setShowAddAccount(true)}
+          className="px-3 py-1.5 bg-crimson-600 text-white rounded-lg text-xs font-medium hover:bg-crimson-700 transition"
+        >
+          + Add account
+        </button>
       </div>
+
+      {showAddAccount && (
+        <form
+          onSubmit={handleCreateAccount}
+          className="bg-white rounded-xl p-5 border border-stone-300/40 mb-6 max-w-sm"
+        >
+          <h3 className="font-medium text-sm text-ink-950 mb-3">New account</h3>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-stone-500 mb-1">Type</label>
+              <select
+                value={newAccountType}
+                onChange={(e) => setNewAccountType(e.target.value)}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              >
+                <option value="checking">Checking</option>
+                <option value="savings">Savings</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-stone-500 mb-1">Nickname (optional)</label>
+              <input
+                type="text"
+                value={newAccountNickname}
+                onChange={(e) => setNewAccountNickname(e.target.value)}
+                placeholder="e.g. Rent, Emergency Fund, Travel"
+                maxLength={40}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <button
+              type="submit"
+              disabled={creating}
+              className="px-4 py-2 bg-ink-950 text-white rounded-lg text-sm font-medium hover:bg-ink-800 transition disabled:opacity-50"
+            >
+              {creating ? 'Creating...' : 'Create account'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAddAccount(false)}
+              className="px-4 py-2 border border-stone-300 text-ink-950 rounded-lg text-sm font-medium hover:bg-white transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
 
       {loading ? (
         <div className="flex gap-4 mb-10">
