@@ -1,5 +1,5 @@
 from pydantic_ai import Agent
-from app.agents.tools.client_tools import get_my_accounts, get_transaction_history, explain_faq, propose_transfer, find_recipient_account
+from app.agents.tools.client_tools import get_my_accounts, get_transaction_history, explain_faq, propose_transfer, find_recipient_account, get_recent_recipients
 from app.agents.deps import ClientAgentDeps
 
 
@@ -37,3 +37,4 @@ client_agent.tool(get_transaction_history)
 client_agent.tool(explain_faq)
 client_agent.tool(propose_transfer)
 client_agent.tool(find_recipient_account)
+client_agent.tool(get_recent_recipients)

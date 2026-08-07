@@ -236,3 +236,49 @@ async def find_recipient_account(ctx: RunContext[ClientAgentDeps], recipient_ema
     for acc in accounts:
         lines.append(f"- {acc.nickname} ({acc.type.value}, {mask_account_number(acc.account_number)})")
     return "\n".join(lines)
+
+
+async def get_recent_recipients(ctx: RunContext[ClientAgentDeps]) -> str:
+    """Get a list of people the client has sent money to before, so they
+    can be referred to by name instead of needing their email again."""
+    my_accounts_result = await ctx.deps.db.execute(select(Account).where(Account.owner_id == ctx.deps.user_id))
+    my_account_ids = [a.id for a in my_accounts_result.scalars().all()]
+    if not my_account_ids:
+        return "You haven't sent any transfers yet."
+
+    from app.models.models import TransactionType
+
+    debit_result = await ctx.deps.db.execute(
+        select(Transaction)
+        .where(
+            Transaction.account_id.in_(my_account_ids),
+            Transaction.type == TransactionType.transfer_debit,
+            Transaction.transfer_group_id.isnot(None),
+        )
+        .order_by(Transaction.created_at.desc())
+    )
+    my_debits = debit_result.scalars().all()
+
+    seen = {}
+    for debit in my_debits:
+        credit_result = await ctx.deps.db.execute(
+            select(Transaction).where(
+                Transaction.transfer_group_id == debit.transfer_group_id,
+                Transaction.type == TransactionType.transfer_credit,
+            )
+        )
+        credit = credit_result.scalar_one_or_none()
+        if not credit:
+            continue
+        acc_result = await ctx.deps.db.execute(select(Account).where(Account.id == credit.account_id))
+        recipient_account = acc_result.scalar_one_or_none()
+        if not recipient_account or recipient_account.owner_id == ctx.deps.user_id:
+            continue
+        user_result = await ctx.deps.db.execute(select(User).where(User.id == recipient_account.owner_id))
+        recipient_user = user_result.scalar_one_or_none()
+        if recipient_user and recipient_user.id not in seen:
+            seen[recipient_user.id] = f"{recipient_user.full_name} ({recipient_user.email})"
+
+    if not seen:
+        return "You haven't sent money to anyone else yet."
+    return "People you've sent money to before:\n" + "\n".join(seen.values())

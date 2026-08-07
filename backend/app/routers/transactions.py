@@ -189,3 +189,60 @@ async def get_account_transactions(
         select(Transaction).where(Transaction.account_id == account_id).order_by(Transaction.created_at.desc())
     )
     return result.scalars().all()
+
+
+
+@router.get("/recipients/recent")
+async def get_recent_recipients(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Returns people this client has sent money to before, most recent first."""
+    my_accounts_result = await db.execute(select(Account).where(Account.owner_id == current_user.id))
+    my_account_ids = [a.id for a in my_accounts_result.scalars().all()]
+
+    if not my_account_ids:
+        return []
+
+    debit_result = await db.execute(
+        select(Transaction)
+        .where(
+            Transaction.account_id.in_(my_account_ids),
+            Transaction.type == TransactionType.transfer_debit,
+            Transaction.transfer_group_id.isnot(None),
+        )
+        .order_by(Transaction.created_at.desc())
+    )
+    my_debits = debit_result.scalars().all()
+
+    seen_users = {}
+    for debit in my_debits:
+        credit_result = await db.execute(
+            select(Transaction).where(
+                Transaction.transfer_group_id == debit.transfer_group_id,
+                Transaction.type == TransactionType.transfer_credit,
+            )
+        )
+        credit = credit_result.scalar_one_or_none()
+        if not credit:
+            continue
+
+        account_result = await db.execute(select(Account).where(Account.id == credit.account_id))
+        recipient_account = account_result.scalar_one_or_none()
+        if not recipient_account or recipient_account.owner_id == current_user.id:
+            continue  # skip transfers to your own other accounts
+
+        user_result = await db.execute(select(User).where(User.id == recipient_account.owner_id))
+        recipient_user = user_result.scalar_one_or_none()
+        if not recipient_user:
+            continue
+
+        if recipient_user.id not in seen_users:
+            seen_users[recipient_user.id] = {
+                "user_id": recipient_user.id,
+                "full_name": recipient_user.full_name,
+                "email": recipient_user.email,
+                "last_transferred_at": debit.created_at.isoformat(),
+            }
+
+    return list(seen_users.values())[:10]
