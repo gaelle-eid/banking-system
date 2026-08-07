@@ -14,14 +14,14 @@ from app.schemas.transaction import DepositRequest, WithdrawalRequest, TransferR
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 
-async def _get_owned_account(db: AsyncSession, account_id: str, user: User) -> Account:
+async def _get_owned_account(db: AsyncSession, account_id: str, user: User, allow_closed: bool = False) -> Account:
     result = await db.execute(select(Account).where(Account.id == account_id))
     account = result.scalar_one_or_none()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     if account.owner_id != user.id and user.role.value == "client":
         raise HTTPException(status_code=403, detail="Not your account")
-    if account.status.value == "closed":
+    if account.status.value == "closed" and not allow_closed:
         raise HTTPException(status_code=400, detail="This account is closed")
     return account
 
@@ -184,7 +184,7 @@ async def get_account_transactions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await _get_owned_account(db, account_id, current_user)  # ownership check
+    await _get_owned_account(db, account_id, current_user, allow_closed=True)  # viewing history is fine even if closed
     result = await db.execute(
         select(Transaction).where(Transaction.account_id == account_id).order_by(Transaction.created_at.desc())
     )

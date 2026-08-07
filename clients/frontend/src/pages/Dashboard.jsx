@@ -25,11 +25,11 @@ export default function Dashboard() {
     const res = await api.get('/accounts/me')
     setAccounts(res.data)
 
-    const txResults = await Promise.all(
+const txResults = await Promise.all(
       res.data.map((acc) =>
-        api.get(`/transactions/${acc.id}`).then((txRes) =>
-          txRes.data.map((tx) => ({ ...tx, accountLabel: acc.nickname || acc.type }))
-        )
+        api.get(`/transactions/${acc.id}`)
+          .then((txRes) => txRes.data.map((tx) => ({ ...tx, accountLabel: acc.nickname || acc.type })))
+          .catch(() => [])
       )
     )
     const merged = txResults.flat().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 8)
