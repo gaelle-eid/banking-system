@@ -2,7 +2,6 @@ import json
 from pydantic_ai import RunContext
 from sqlalchemy import select
 import re
-
 from app.agents.deps import ClientAgentDeps
 from app.models.models import Account, Transaction, User, AgentActionLog, AgentActionStatus
 
@@ -282,3 +281,61 @@ async def get_recent_recipients(ctx: RunContext[ClientAgentDeps]) -> str:
     if not seen:
         return "You haven't sent money to anyone else yet."
     return "People you've sent money to before:\n" + "\n".join(seen.values())
+
+
+async def recommend_card_tier(ctx: RunContext[ClientAgentDeps]) -> str:
+    """Analyze the client's transaction history and recommend a card tier
+    (standard, cashback, travel, or premium) with reasoning based on their
+    spending patterns and account balances."""
+    accounts_result = await ctx.deps.db.execute(
+        select(Account).where(Account.owner_id == ctx.deps.user_id)
+    )
+    accounts = accounts_result.scalars().all()
+    if not accounts:
+        return "You need at least one account before I can recommend a card."
+
+    total_balance = sum(float(a.balance) for a in accounts)
+    account_ids = [a.id for a in accounts]
+
+    tx_result = await ctx.deps.db.execute(
+        select(Transaction).where(Transaction.account_id.in_(account_ids))
+    )
+    txs = tx_result.scalars().all()
+
+    total_outgoing = sum(float(t.amount) for t in txs if t.type.value in ("withdrawal", "transfer_debit"))
+    transfer_count = sum(1 for t in txs if t.type.value in ("transfer_debit", "transfer_credit"))
+    tx_count = len(txs)
+
+    # Simple, explainable heuristic (no real merchant-category data available yet)
+    if total_balance >= 5000 and total_outgoing >= 2000:
+        tier = "premium"
+        reason = (
+            f"You maintain a strong balance (~${total_balance:.0f}) and move significant money "
+            f"(~${total_outgoing:.0f} in withdrawals/transfers). A Premium card offers the highest "
+            f"limits and best perks for that level of activity."
+        )
+    elif transfer_count >= 5:
+        tier = "travel"
+        reason = (
+            f"You've made {transfer_count} transfers, suggesting frequent movement of money "
+            f"(possibly across accounts or to others). A Travel card rewards this kind of "
+            f"active, flexible spending with travel-related perks."
+        )
+    elif tx_count >= 5:
+        tier = "cashback"
+        reason = (
+            f"You have {tx_count} transactions on record - regular, everyday activity. "
+            f"A Cashback card rewards frequent spending with a percentage back on every purchase."
+        )
+    else:
+        tier = "standard"
+        reason = (
+            "You don't have much transaction history yet. A Standard card is a solid starting "
+            "point with no annual fee - I can suggest an upgrade once I see more activity."
+        )
+
+    return (
+        f"Based on your activity, I'd recommend a **{tier.capitalize()} card**.\n\n{reason}\n\n"
+        f"Want me to prepare a card request for you at this tier?"
+    )
+

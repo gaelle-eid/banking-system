@@ -59,6 +59,11 @@ class CardType(str, enum.Enum):
     debit = "debit"
     credit = "credit"
 
+class CardTier(str, enum.Enum):
+    standard = "standard"
+    cashback = "cashback"
+    travel = "travel"
+    premium = "premium"
 
 class CardStatus(str, enum.Enum):
     pending = "pending"
@@ -175,11 +180,10 @@ class Card(Base):
     account_id = Column(UUID(as_uuid=False), ForeignKey("accounts.id"), nullable=False)
     masked_number = Column(String, nullable=False)
     type = Column(Enum(CardType), nullable=False)
+    tier = Column(Enum(CardTier), default=CardTier.standard)
     status = Column(Enum(CardStatus), default=CardStatus.active)
     expiry_date = Column(DateTime, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-
-
 class Statement(Base):
     __tablename__ = "statements"
 

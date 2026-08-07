@@ -36,6 +36,7 @@ async def request_card(
         account_id=account.id,
         masked_number=generate_masked_number(),
         type=payload.type,
+        tier=payload.tier,
         status=CardStatus.pending,
         expiry_date=datetime.utcnow() + timedelta(days=365 * 3),
     )
@@ -52,7 +53,7 @@ async def request_card(
 
     await log_action(
         db, current_user.id, "requested", "card", card.id,
-        details={"type": payload.type.value},
+        details={"type": payload.type.value, "tier": payload.tier.value},
     )
 
     await db.commit()
