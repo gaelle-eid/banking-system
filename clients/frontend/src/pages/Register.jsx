@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import api from '../lib/api'
 
 export default function Register() {
   const [form, setForm] = useState({
@@ -16,6 +17,9 @@ export default function Register() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [registered, setRegistered] = useState(false)
+  const [newUserId, setNewUserId] = useState(null)
+  const [idPhoto, setIdPhoto] = useState(null)
+  const [uploadStatus, setUploadStatus] = useState('')
   const { register } = useAuth()
 
   function update(field, value) {
@@ -27,7 +31,8 @@ export default function Register() {
     setError('')
     setLoading(true)
     try {
-      await register(form)
+      const user = await register(form)
+      setNewUserId(user.id)
       setRegistered(true)
     } catch (err) {
       const detail = err.response?.data?.detail
@@ -41,6 +46,22 @@ export default function Register() {
     }
   }
 
+  async function handlePhotoUpload() {
+    if (!idPhoto || !newUserId) return
+    setUploadStatus('uploading')
+    const formData = new FormData()
+    formData.append('file', idPhoto)
+    try {
+      await api.post(`/auth/${newUserId}/upload-id-photo`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setUploadStatus('done')
+    } catch (err) {
+      setUploadStatus('')
+      setError(err.response?.data?.detail || 'Photo upload failed')
+    }
+  }
+
   const inputClass = "w-full px-3 py-2 border border-stone-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-crimson-600"
   const labelClass = "block text-sm font-medium text-ink-950 mb-1"
 
@@ -48,12 +69,46 @@ export default function Register() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-paper-50 px-4">
         <div className="w-full max-w-sm text-center">
-          <div className="w-12 h-12 bg-crimson-100 text-crimson-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">✉</div>
-          <h1 className="font-display text-xl font-semibold text-ink-950 mb-2">Check your email</h1>
-          <p className="text-stone-500 text-sm mb-6">
-            We've sent a verification link to <strong>{form.email}</strong>. Click it to activate your account, then come back and log in.
-          </p>
-          <Link to="/login" className="text-crimson-600 text-sm font-medium">Back to login</Link>
+          {uploadStatus !== 'done' && uploadStatus !== 'skipped' ? (
+            <>
+              <div className="w-12 h-12 bg-crimson-100 text-crimson-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">🪪</div>
+              <h1 className="font-display text-xl font-semibold text-ink-950 mb-2">Verify your identity</h1>
+              <p className="text-stone-500 text-sm mb-6">
+                Upload a clear photo of your national ID or passport. This helps us verify your identity before activating your account.
+              </p>
+              <input
+                type="file"
+                accept="image/png,image/jpeg"
+                onChange={(e) => setIdPhoto(e.target.files[0])}
+                className="mb-4 text-sm w-full"
+              />
+              {error && <p className="text-crimson-600 text-sm mb-4">{error}</p>}
+              <div className="flex gap-2">
+                <button
+                  onClick={handlePhotoUpload}
+                  disabled={!idPhoto || uploadStatus === 'uploading'}
+                  className="flex-1 bg-ink-950 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-ink-800 transition disabled:opacity-50"
+                >
+                  {uploadStatus === 'uploading' ? 'Uploading...' : 'Upload photo'}
+                </button>
+                <button
+                  onClick={() => setUploadStatus('skipped')}
+                  className="px-4 py-2.5 border border-stone-300 text-ink-950 rounded-lg text-sm font-medium hover:bg-white transition"
+                >
+                  Skip for now
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="w-12 h-12 bg-crimson-100 text-crimson-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">✉</div>
+              <h1 className="font-display text-xl font-semibold text-ink-950 mb-2">Check your email</h1>
+              <p className="text-stone-500 text-sm mb-6">
+                We've sent a verification link to <strong>{form.email}</strong>. Click it to activate your account, then come back and log in.
+              </p>
+              <Link to="/login" className="text-crimson-600 text-sm font-medium">Back to login</Link>
+            </>
+          )}
         </div>
       </div>
     )
@@ -115,7 +170,7 @@ export default function Register() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-ink-950 text-white py-2.5 rounded-lg font-medium hover:bg-ink-900 transition disabled:opacity-50"
+            className="w-full bg-ink-950 text-white py-2.5 rounded-lg font-medium hover:bg-ink-800 transition disabled:opacity-50"
           >
             {loading ? 'Creating account...' : 'Create account'}
           </button>

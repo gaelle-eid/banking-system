@@ -33,6 +33,7 @@ services:
     volumes:
       - ./backend:/app
       - /app/.venv
+      - ./backend/uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy

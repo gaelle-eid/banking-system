@@ -120,6 +120,7 @@ class User(Base):
     date_of_birth = Column(DateTime, nullable=True)
     address = Column(String, nullable=True)
     national_id = Column(String, nullable=True)
+    national_id_photo_path = Column(String, nullable=True)
     role = Column(Enum(UserRole), nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
     verification_token = Column(String, nullable=True)
