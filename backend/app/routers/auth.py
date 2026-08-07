@@ -145,6 +145,12 @@ async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)):
     if not user.is_verified:
         raise HTTPException(status_code=403, detail="Please verify your email before logging in")
 
+    if user.role.value == "client" and user.registration_status.value == "pending_review":
+        raise HTTPException(status_code=403, detail="Your application is under review. We'll notify you once it's processed.")
+
+    if user.role.value == "client" and user.registration_status.value == "rejected":
+        raise HTTPException(status_code=403, detail="Your account application was not approved.")
+     
     if user.role.value == "employee":
         from app.models.models import EmployeeProfile, EmployeeStatus
         profile_result = await db.execute(select(EmployeeProfile).where(EmployeeProfile.user_id == user.id))

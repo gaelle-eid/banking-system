@@ -107,6 +107,12 @@ class EmployeeStatus(str, enum.Enum):
     on_leave = "on_leave"
     terminated = "terminated"
 
+
+class RegistrationStatus(str, enum.Enum):
+    pending_review = "pending_review"
+    approved = "approved"
+    rejected = "rejected"
+
 # ---------- Core ----------
 
 class User(Base):
@@ -123,6 +129,7 @@ class User(Base):
     national_id_photo_path = Column(String, nullable=True)
     role = Column(Enum(UserRole), nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
+    registration_status = Column(Enum(RegistrationStatus), default=RegistrationStatus.pending_review, nullable=False)
     verification_token = Column(String, nullable=True)
     last_login_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

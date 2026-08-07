@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, accounts, transactions, loans, cards, statements, agent, approvals, audit, employees, reports, admin, employee_agent
+from app.routers import auth, accounts, transactions, loans, cards, statements, agent, approvals, audit, employees, reports, admin, employee_agent, registrations
 app = FastAPI(title="Banking System API")
 
 app.add_middleware(
@@ -24,7 +24,7 @@ app.include_router(employees.router)
 app.include_router(reports.router)
 app.include_router(admin.router)
 app.include_router(employee_agent.router)
-
+app.include_router(registrations.router)
 
 @app.get("/health")
 async def health_check():
