@@ -63,3 +63,24 @@ async def list_my_cards(
         select(Card).join(Account).where(Account.owner_id == current_user.id)
     )
     return result.scalars().all()
+
+
+@router.patch("/{card_id}/cancel", response_model=CardOut)
+async def cancel_card(
+    card_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Card).join(Account).where(Card.id == card_id, Account.owner_id == current_user.id)
+    )
+    card = result.scalar_one_or_none()
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found")
+    if card.status != CardStatus.active:
+        raise HTTPException(status_code=400, detail=f"Card is already {card.status.value}")
+
+    card.status = CardStatus.blocked
+    await db.commit()
+    await db.refresh(card)
+    return card

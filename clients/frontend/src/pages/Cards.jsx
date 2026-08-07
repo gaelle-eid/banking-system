@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../lib/api'
 import Layout from '../components/Layout'
 import StatusBadge from '../components/StatusBadge'
+import { useToast } from '../context/ToastContext'
 import { formatDate } from '../lib/format'
 
 export default function Cards() {
@@ -13,6 +14,8 @@ export default function Cards() {
   const [cardType, setCardType] = useState('debit')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [cancellingId, setCancellingId] = useState(null)
+  const { showToast } = useToast()
 
   async function loadData() {
     const [cardsRes, accountsRes] = await Promise.all([
@@ -41,6 +44,19 @@ export default function Cards() {
       setError(err.response?.data?.detail || 'Card request failed')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleCancel(cardId) {
+    setCancellingId(cardId)
+    try {
+      await api.patch(`/cards/${cardId}/cancel`)
+      showToast('Card cancelled')
+      await loadData()
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Could not cancel card', 'error')
+    } finally {
+      setCancellingId(null)
     }
   }
 
@@ -114,7 +130,16 @@ export default function Cards() {
                   <StatusBadge status={card.status} />
                 </div>
                 <p className="font-mono text-lg tracking-[0.2em] mb-1">{card.masked_number}</p>
-                <p className="text-xs text-stone-300">Expires {formatDate(card.expiry_date)}</p>
+                <p className="text-xs text-stone-300 mb-3">Expires {formatDate(card.expiry_date)}</p>
+                {card.status === 'active' && (
+                  <button
+                    onClick={() => handleCancel(card.id)}
+                    disabled={cancellingId === card.id}
+                    className="text-xs text-stone-300 hover:text-white underline disabled:opacity-50"
+                  >
+                    {cancellingId === card.id ? 'Cancelling...' : 'Cancel this card'}
+                  </button>
+                )}
               </div>
             </div>
           ))}

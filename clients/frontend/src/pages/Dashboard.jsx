@@ -60,8 +60,9 @@ const txResults = await Promise.all(
       navigate(`/accounts/${accounts[0].id}`)
     }
   }
-
-  const totalBalance = accounts.reduce((sum, a) => sum + parseFloat(a.balance), 0)
+const activeAccounts = accounts.filter((a) => a.status === 'active')
+  const closedAccounts = accounts.filter((a) => a.status === 'closed')
+  const totalBalance = activeAccounts.reduce((sum, a) => sum + parseFloat(a.balance), 0)
   const currency = accounts[0]?.currency || 'USD'
 
   return (
@@ -83,8 +84,8 @@ const txResults = await Promise.all(
             {formatMoney(totalBalance, currency)}
           </p>
         )}
-        <p className="text-stone-500 text-sm mt-2">
-          Across {accounts.length} account{accounts.length !== 1 ? 's' : ''}
+<p className="text-stone-500 text-sm mt-2">
+          Across {activeAccounts.length} account{activeAccounts.length !== 1 ? 's' : ''}
         </p>
       </div>
 
@@ -131,19 +132,35 @@ const txResults = await Promise.all(
             <div key={i} className="w-72 h-40 shrink-0 bg-stone-300/20 rounded-2xl animate-pulse" />
           ))}
         </div>
-      ) : accounts.length === 0 ? (
+) : activeAccounts.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 text-center border border-stone-300/40 mb-10">
-          <p className="text-stone-500">You don't have any accounts yet.</p>
+          <p className="text-stone-500">You don't have any active accounts.</p>
           <p className="text-sm text-stone-500/70 mt-1">Create one above to get started.</p>
         </div>
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-2 mb-10 -mx-1 px-1">
-          {accounts.map((account) => (
+          {activeAccounts.map((account) => (
             <div key={account.id} className="w-72 shrink-0">
               <AccountCard account={account} />
             </div>
           ))}
         </div>
+      )}
+
+      {closedAccounts.length > 0 && (
+        <details className="mb-10">
+          <summary className="text-sm text-stone-500 cursor-pointer hover:text-ink-950">
+            {closedAccounts.length} closed account{closedAccounts.length !== 1 ? 's' : ''}
+          </summary>
+          <div className="mt-3 space-y-2">
+            {closedAccounts.map((a) => (
+              <div key={a.id} className="flex justify-between items-center bg-stone-300/10 rounded-lg px-4 py-2 text-sm text-stone-500">
+                <span>{a.nickname || a.account_number}</span>
+                <span>Closed</span>
+              </div>
+            ))}
+          </div>
+        </details>
       )}
 
       {/* Spending chart */}
