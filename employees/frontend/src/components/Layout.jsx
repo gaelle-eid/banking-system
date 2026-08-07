@@ -11,6 +11,9 @@ const navItems = [
   { path: '/clients', label: 'Clients', icon: (p) => (
     <svg {...p} viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8"/><path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><path d="M16 8.5a3 3 0 100-6M18 14c2.3.3 4 2.1 4 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
   )},
+  { path: '/staff', label: 'Staff', icon: (p) => (
+    <svg {...p} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.8"/><path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+  )},
   { path: '/audit-log', label: 'Audit Log', icon: (p) => (
     <svg {...p} viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.8"/><path d="M14 2v6h6M8 13h8M8 17h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
   )},
