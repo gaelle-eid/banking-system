@@ -10,6 +10,7 @@ import Staff from './pages/Staff'
 import AuditLog from './pages/AuditLog'
 import Reports from './pages/Reports'
 import Assistant from './pages/Assistant'
+import PendingRegistrations from './pages/PendingRegistrations'
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
             <Route path="/audit-log" element={<ProtectedRoute><AuditLog /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/assistant" element={<ProtectedRoute><Assistant /></ProtectedRoute>} />
+            <Route path="/pending-registrations" element={<ProtectedRoute><PendingRegistrations /></ProtectedRoute>} />
           </Routes>
         </AuthProvider>
       </ToastProvider>
