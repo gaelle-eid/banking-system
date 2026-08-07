@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.models.models import Account, User
+from app.models.models import Account, AccountStatus, User
 from app.schemas.account import AccountCreate, AccountOut
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
@@ -68,4 +68,26 @@ async def get_account(
         raise HTTPException(status_code=404, detail="Account not found")
     if account.owner_id != current_user.id and current_user.role.value == "client":
         raise HTTPException(status_code=403, detail="Not your account")
+    return account
+
+
+@router.patch("/{account_id}/close", response_model=AccountOut)
+async def close_account(
+    account_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Account).where(Account.id == account_id))
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if account.owner_id != current_user.id and current_user.role.value == "client":
+        raise HTTPException(status_code=403, detail="Not your account")
+
+    if account.balance != 0:
+        raise HTTPException(status_code=400, detail="Account must have a zero balance before closing")
+
+    account.status = AccountStatus.closed
+    await db.commit()
+    await db.refresh(account)
     return account

@@ -21,6 +21,8 @@ async def _get_owned_account(db: AsyncSession, account_id: str, user: User) -> A
         raise HTTPException(status_code=404, detail="Account not found")
     if account.owner_id != user.id and user.role.value == "client":
         raise HTTPException(status_code=403, detail="Not your account")
+    if account.status.value == "closed":
+        raise HTTPException(status_code=400, detail="This account is closed")
     return account
 
 
