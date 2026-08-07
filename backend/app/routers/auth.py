@@ -106,6 +106,13 @@ async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)):
     if not user.is_verified:
         raise HTTPException(status_code=403, detail="Please verify your email before logging in")
 
+    if user.role.value == "employee":
+        from app.models.models import EmployeeProfile, EmployeeStatus
+        profile_result = await db.execute(select(EmployeeProfile).where(EmployeeProfile.user_id == user.id))
+        profile = profile_result.scalar_one_or_none()
+        if profile and profile.status == EmployeeStatus.terminated:
+            raise HTTPException(status_code=403, detail="This employee account has been terminated")
+
     user.last_login_at = datetime.utcnow()
     await db.commit()
 
