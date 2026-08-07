@@ -40,7 +40,11 @@ async def check_transaction_limits(db: AsyncSession, account, amount: Decimal, i
                 f"You have {max(remaining, Decimal(0))} remaining today."
             )
 
-        if account.balance - amount < MIN_BALANCE_AFTER_WITHDRAWAL:
+        remaining_balance = account.balance - amount
+        # Allow withdrawing the FULL remaining balance (emptying the account,
+        # e.g. to close it) as an exception to the minimum balance rule.
+        if remaining_balance != 0 and remaining_balance < MIN_BALANCE_AFTER_WITHDRAWAL:
             raise ValueError(
-                f"This would leave your account below the required minimum balance of {MIN_BALANCE_AFTER_WITHDRAWAL}."
+                f"This would leave your account below the required minimum balance of {MIN_BALANCE_AFTER_WITHDRAWAL}. "
+                f"Withdraw the full balance ({account.balance}) instead if you're trying to empty the account."
             )

@@ -19,6 +19,7 @@ export default function AccountDetail() {
   const [transferTo, setTransferTo] = useState('')
   const [actionError, setActionError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false)
   const { showToast } = useToast()
 
   async function loadData() {
@@ -96,17 +97,31 @@ export default function AccountDetail() {
     }
   }
 
+  async function handleCloseAccount() {
+    setActionLoading(true)
+    try {
+      await api.patch(`/accounts/${id}/close`)
+      showToast('Account closed')
+      setShowCloseConfirm(false)
+      await loadData()
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Could not close account', 'error')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   if (loading) return <Layout><p className="text-stone-500">Loading...</p></Layout>
   if (!account) return <Layout><p className="text-crimson-600">Account not found.</p></Layout>
 
   return (
     <Layout>
-      <button onClick={() => navigate('/')} className="text-sm text-stone-500 hover:text-ink-950 mb-4">
+      <button onClick={() => navigate('/dashboard')} className="text-sm text-stone-500 hover:text-ink-950 mb-4">
         ← Back to accounts
       </button>
 
       <div
-        className="relative rounded-2xl p-6 mb-8 max-w-sm text-white overflow-hidden"
+        className="relative rounded-2xl p-6 mb-4 max-w-sm text-white overflow-hidden"
         style={{ background: 'linear-gradient(135deg, #1F1917 0%, #16110F 60%, #16110F 100%)' }}
       >
         <div
@@ -122,8 +137,51 @@ export default function AccountDetail() {
         </div>
       </div>
 
+      {account.status === 'active' && (
+        <button
+          onClick={() => setShowCloseConfirm(true)}
+          className="text-sm text-crimson-600 hover:underline mb-6"
+        >
+          Close this account
+        </button>
+      )}
+
+      {account.status === 'closed' && (
+        <div className="bg-stone-300/20 text-stone-500 text-sm rounded-lg px-4 py-3 mb-6">
+          This account is closed.
+        </div>
+      )}
+
+      {showCloseConfirm && (
+        <div className="bg-white rounded-xl border border-crimson-600/40 p-4 mb-6 max-w-sm">
+          <p className="text-sm text-ink-950 mb-3">
+            {parseFloat(account.balance) === 0
+              ? 'Are you sure you want to close this account? This cannot be undone.'
+              : `You must withdraw or transfer out the remaining ${formatMoney(account.balance, account.currency)} before closing this account.`}
+          </p>
+          <div className="flex gap-2">
+            {parseFloat(account.balance) === 0 && (
+              <button
+                onClick={handleCloseAccount}
+                disabled={actionLoading}
+                className="px-3 py-1.5 bg-crimson-600 text-white rounded-lg text-sm font-medium hover:bg-crimson-700 transition disabled:opacity-50"
+              >
+                {actionLoading ? 'Closing...' : 'Yes, close it'}
+              </button>
+            )}
+            <button
+              onClick={() => setShowCloseConfirm(false)}
+              className="px-3 py-1.5 border border-stone-300 text-ink-950 rounded-lg text-sm font-medium hover:bg-white transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {actionError && <p className="text-crimson-600 text-sm mb-4">{actionError}</p>}
 
+      {account.status === 'active' && (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <form onSubmit={handleDeposit} className="bg-white rounded-xl p-4 border border-stone-300/40">
           <h3 className="font-medium text-sm mb-3 text-ink-950">Deposit</h3>
@@ -176,6 +234,7 @@ export default function AccountDetail() {
           </button>
         </form>
       </div>
+      )}
 
       <h2 className="font-display text-lg font-semibold mb-3 text-ink-950">Transaction history</h2>
       {transactions.length === 0 ? (
