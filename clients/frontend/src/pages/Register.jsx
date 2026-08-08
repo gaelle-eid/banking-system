@@ -19,7 +19,10 @@ export default function Register() {
   const [registered, setRegistered] = useState(false)
   const [newUserId, setNewUserId] = useState(null)
   const [idPhoto, setIdPhoto] = useState(null)
-  const [uploadStatus, setUploadStatus] = useState('')
+  const [uploadStatus, setUploadStatus] = useState('') // '', 'uploading', 'done', 'skipped'
+  const [otpSent, setOtpSent] = useState(false)
+  const [otpValue, setOtpValue] = useState('')
+  const [otpStatus, setOtpStatus] = useState('') // '', 'sending', 'sent', 'verifying', 'done', 'skipped'
   const { register } = useAuth()
 
   function update(field, value) {
@@ -62,53 +65,146 @@ export default function Register() {
     }
   }
 
+  async function handleSendOtp() {
+    setOtpStatus('sending')
+    setError('')
+    try {
+      await api.post(`/auth/${newUserId}/send-phone-otp`)
+      setOtpSent(true)
+      setOtpStatus('sent')
+    } catch (err) {
+      setOtpStatus('')
+      setError(err.response?.data?.detail || 'Could not send code')
+    }
+  }
+
+  async function handleVerifyOtp() {
+    setOtpStatus('verifying')
+    setError('')
+    try {
+      await api.post(`/auth/${newUserId}/verify-phone-otp`, { otp: otpValue })
+      setOtpStatus('done')
+    } catch (err) {
+      setOtpStatus('sent')
+      setError(err.response?.data?.detail || 'Incorrect code')
+    }
+  }
+
   const inputClass = "w-full px-3 py-2 border border-stone-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-crimson-600"
   const labelClass = "block text-sm font-medium text-ink-950 mb-1"
 
   if (registered) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-paper-50 px-4">
-        <div className="w-full max-w-sm text-center">
-          {uploadStatus !== 'done' && uploadStatus !== 'skipped' ? (
-            <>
-              <div className="w-12 h-12 bg-crimson-100 text-crimson-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">🪪</div>
-              <h1 className="font-display text-xl font-semibold text-ink-950 mb-2">Verify your identity</h1>
-              <p className="text-stone-500 text-sm mb-6">
-                Upload a clear photo of your national ID or passport. This helps us verify your identity before activating your account.
-              </p>
-              <input
-                type="file"
-                accept="image/png,image/jpeg"
-                onChange={(e) => setIdPhoto(e.target.files[0])}
-                className="mb-4 text-sm w-full"
-              />
-              {error && <p className="text-crimson-600 text-sm mb-4">{error}</p>}
+    const idStepDone = uploadStatus === 'done' || uploadStatus === 'skipped'
+    const phoneStepDone = otpStatus === 'done' || otpStatus === 'skipped'
+
+    if (!idStepDone) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-paper-50 px-4">
+          <div className="w-full max-w-sm text-center">
+            <div className="w-12 h-12 bg-crimson-100 text-crimson-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">🪪</div>
+            <h1 className="font-display text-xl font-semibold text-ink-950 mb-2">Verify your identity</h1>
+            <p className="text-stone-500 text-sm mb-6">
+              Upload a clear photo of your national ID or passport. This helps us verify your identity before activating your account.
+            </p>
+            <input
+              type="file"
+              accept="image/png,image/jpeg"
+              onChange={(e) => setIdPhoto(e.target.files[0])}
+              className="mb-4 text-sm w-full"
+            />
+            {error && <p className="text-crimson-600 text-sm mb-4">{error}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={handlePhotoUpload}
+                disabled={!idPhoto || uploadStatus === 'uploading'}
+                className="flex-1 bg-ink-950 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-ink-800 transition disabled:opacity-50"
+              >
+                {uploadStatus === 'uploading' ? 'Uploading...' : 'Upload photo'}
+              </button>
+              <button
+                onClick={() => setUploadStatus('skipped')}
+                className="px-4 py-2.5 border border-stone-300 text-ink-950 rounded-lg text-sm font-medium hover:bg-white transition"
+              >
+                Skip for now
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    if (!phoneStepDone) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-paper-50 px-4">
+          <div className="w-full max-w-sm text-center">
+            <div className="w-12 h-12 bg-crimson-100 text-crimson-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">📱</div>
+            <h1 className="font-display text-xl font-semibold text-ink-950 mb-2">Verify your phone</h1>
+            <p className="text-stone-500 text-sm mb-6">
+              {!otpSent
+                ? <>We'll send a verification code for <strong>{form.phone}</strong> to your email.</>
+                : 'Enter the 6-digit code we sent to your email.'}
+            </p>
+
+            {error && <p className="text-crimson-600 text-sm mb-4">{error}</p>}
+
+            {!otpSent ? (
               <div className="flex gap-2">
                 <button
-                  onClick={handlePhotoUpload}
-                  disabled={!idPhoto || uploadStatus === 'uploading'}
+                  onClick={handleSendOtp}
+                  disabled={otpStatus === 'sending'}
                   className="flex-1 bg-ink-950 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-ink-800 transition disabled:opacity-50"
                 >
-                  {uploadStatus === 'uploading' ? 'Uploading...' : 'Upload photo'}
+                  {otpStatus === 'sending' ? 'Sending...' : 'Send code'}
                 </button>
                 <button
-                  onClick={() => setUploadStatus('skipped')}
+                  onClick={() => setOtpStatus('skipped')}
                   className="px-4 py-2.5 border border-stone-300 text-ink-950 rounded-lg text-sm font-medium hover:bg-white transition"
                 >
                   Skip for now
                 </button>
               </div>
-            </>
-          ) : (
-            <>
-              <div className="w-12 h-12 bg-crimson-100 text-crimson-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">✉</div>
-              <h1 className="font-display text-xl font-semibold text-ink-950 mb-2">Check your email</h1>
-              <p className="text-stone-500 text-sm mb-6">
-                We've sent a verification link to <strong>{form.email}</strong>. Click it to activate your account, then come back and log in.
-              </p>
-              <Link to="/login" className="text-crimson-600 text-sm font-medium">Back to login</Link>
-            </>
-          )}
+            ) : (
+              <>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={otpValue}
+                  onChange={(e) => setOtpValue(e.target.value.replace(/\D/g, ''))}
+                  className="w-full px-3 py-2 border border-stone-300 rounded-lg text-center text-lg font-mono tracking-[0.3em] mb-4"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleVerifyOtp}
+                    disabled={otpValue.length !== 6 || otpStatus === 'verifying'}
+                    className="flex-1 bg-ink-950 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-ink-800 transition disabled:opacity-50"
+                  >
+                    {otpStatus === 'verifying' ? 'Verifying...' : 'Verify'}
+                  </button>
+                  <button
+                    onClick={() => setOtpStatus('skipped')}
+                    className="px-4 py-2.5 border border-stone-300 text-ink-950 rounded-lg text-sm font-medium hover:bg-white transition"
+                  >
+                    Skip
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-paper-50 px-4">
+        <div className="w-full max-w-sm text-center">
+          <div className="w-12 h-12 bg-crimson-100 text-crimson-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">✉</div>
+          <h1 className="font-display text-xl font-semibold text-ink-950 mb-2">Check your email</h1>
+          <p className="text-stone-500 text-sm mb-6">
+            We've sent a verification link to <strong>{form.email}</strong>. Click it to activate your account, then come back and log in.
+          </p>
+          <Link to="/login" className="text-crimson-600 text-sm font-medium">Back to login</Link>
         </div>
       </div>
     )
