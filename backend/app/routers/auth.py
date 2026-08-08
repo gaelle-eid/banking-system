@@ -1,12 +1,12 @@
 import secrets
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
+from app.core.email import send_verification_email, send_welcome_email, send_phone_otp_email
 from app.core.database import get_db
 from app.core.security import hash_password, verify_password, create_access_token
 from app.core.deps import get_current_user
@@ -15,9 +15,8 @@ from app.core.email import send_verification_email, send_welcome_email
 from app.models.models import User
 from app.schemas.auth import (
     UserRegister, UserLogin, TokenResponse, UserOut,
-    VerifyResponse, ResendVerificationRequest,
+    VerifyResponse, ResendVerificationRequest, VerifyPhoneOtpRequest,
 )
-
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 UPLOAD_DIR = "uploads/national_ids"
@@ -88,6 +87,55 @@ async def upload_id_photo(
     await db.commit()
 
     return {"message": "ID photo uploaded successfully"}
+
+
+@router.post("/{user_id}/send-phone-otp", response_model=VerifyResponse)
+async def send_phone_otp(user_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.phone:
+        raise HTTPException(status_code=400, detail="No phone number on file")
+    if user.phone_verified:
+        return VerifyResponse(message="Phone already verified.")
+
+    import random
+    otp = f"{random.randint(0, 999999):06d}"
+    user.phone_otp = otp
+    user.phone_otp_expires_at = datetime.utcnow() + timedelta(minutes=10)
+    await db.commit()
+
+    try:
+        send_phone_otp_email(user.email, user.full_name, otp)
+    except Exception:
+        pass
+
+    return VerifyResponse(message="Verification code sent.")
+
+
+@router.post("/{user_id}/verify-phone-otp", response_model=VerifyResponse)
+async def verify_phone_otp(user_id: str, payload: VerifyPhoneOtpRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.phone_verified:
+        return VerifyResponse(message="Phone already verified.")
+    if not user.phone_otp or not user.phone_otp_expires_at:
+        raise HTTPException(status_code=400, detail="No verification code was requested")
+    if datetime.utcnow() > user.phone_otp_expires_at:
+        raise HTTPException(status_code=400, detail="This code has expired. Please request a new one.")
+    if payload.otp != user.phone_otp:
+        raise HTTPException(status_code=400, detail="Incorrect code")
+
+    user.phone_verified = True
+    user.phone_otp = None
+    user.phone_otp_expires_at = None
+    await db.commit()
+
+    return VerifyResponse(message="Phone number verified successfully.")
+
 
 
 @router.get("/verify", response_model=VerifyResponse)

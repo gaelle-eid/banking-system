@@ -65,3 +65,16 @@ def send_transaction_email(to: str, full_name: str, tx_type: str, amount: str, a
     </div>
     """
     return send_email(to, f"Transaction alert: {tx_type.replace('_', ' ').title()}", html)
+
+
+def send_phone_otp_email(to: str, full_name: str, otp: str):
+    html = f"""
+    <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
+      <h2>Verify your phone number</h2>
+      <p>Hi {full_name},</p>
+      <p>Your phone verification code is:</p>
+      <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #C41E3A;">{otp}</p>
+      <p style="color:#8A93A6;font-size:12px;">This code expires in 10 minutes. If you didn't request this, you can ignore this email.</p>
+    </div>
+    """
+    return send_email(to, "Your phone verification code", html)

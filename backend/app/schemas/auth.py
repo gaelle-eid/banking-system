@@ -94,3 +94,11 @@ class VerifyResponse(BaseModel):
 
 class ResendVerificationRequest(BaseModel):
     email: EmailStr
+
+
+class SendPhoneOtpRequest(BaseModel):
+    pass
+
+
+class VerifyPhoneOtpRequest(BaseModel):
+    otp: str
