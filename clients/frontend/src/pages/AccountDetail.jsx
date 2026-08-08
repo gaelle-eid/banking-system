@@ -4,7 +4,7 @@ import api from '../lib/api'
 import Layout from '../components/Layout'
 import { formatMoney, formatDate } from '../lib/format'
 import { useToast } from '../context/ToastContext'
-
+import PhoneTransferForm from '../components/PhoneTransferForm'
 export default function AccountDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -232,8 +232,14 @@ export default function AccountDetail() {
           <button disabled={actionLoading} className="w-full bg-crimson-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-crimson-700 transition disabled:opacity-50">
             Transfer
           </button>
-        </form>
+       </form>
       </div>
+      )}
+
+      {account.status === 'active' && (
+        <div className="max-w-sm mb-8">
+          <PhoneTransferForm accountId={id} onSuccess={loadData} />
+        </div>
       )}
 
       <h2 className="font-display text-lg font-semibold mb-3 text-ink-950">Transaction history</h2>
