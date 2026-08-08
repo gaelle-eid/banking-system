@@ -31,3 +31,14 @@ class TransactionOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PhoneTransferInitiateRequest(BaseModel):
+    from_account_id: str
+    to_phone: str
+    amount: Decimal = Field(gt=0)
+
+
+class PhoneTransferConfirmRequest(BaseModel):
+    verification_id: str
+    otp: str

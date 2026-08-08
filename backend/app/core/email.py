@@ -78,3 +78,17 @@ def send_phone_otp_email(to: str, full_name: str, otp: str):
     </div>
     """
     return send_email(to, "Your phone verification code", html)
+
+
+def send_transfer_otp_email(to: str, full_name: str, otp: str, amount: str, recipient_name: str):
+    html = f"""
+    <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
+      <h2>Confirm your transfer</h2>
+      <p>Hi {full_name},</p>
+      <p>You're sending <strong>{amount}</strong> to <strong>{recipient_name}</strong>.</p>
+      <p>Your verification code is:</p>
+      <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #C41E3A;">{otp}</p>
+      <p style="color:#8A93A6;font-size:12px;">This code expires in 5 minutes. If you didn't request this transfer, do not share this code and contact support.</p>
+    </div>
+    """
+    return send_email(to, "Confirm your transfer", html)

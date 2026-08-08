@@ -279,3 +279,17 @@ class EmployeeProfile(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+
+
+class TransferVerification(Base):
+    __tablename__ = "transfer_verifications"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    initiated_by = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    from_account_id = Column(UUID(as_uuid=False), ForeignKey("accounts.id"), nullable=False)
+    to_account_id = Column(UUID(as_uuid=False), ForeignKey("accounts.id"), nullable=False)
+    amount = Column(Numeric(14, 2), nullable=False)
+    otp = Column(String, nullable=False)
+    otp_expires_at = Column(DateTime, nullable=False)
+    verified = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
