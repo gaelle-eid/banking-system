@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import (
     Column, String, Numeric, ForeignKey, DateTime, Enum, Text, JSON, Boolean
 )
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, declarative_base
 
@@ -292,4 +293,25 @@ class TransferVerification(Base):
     otp = Column(String, nullable=False)
     otp_expires_at = Column(DateTime, nullable=False)
     verified = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class KnowledgeDocument(Base):
+    __tablename__ = "knowledge_documents"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    title = Column(String, nullable=False)
+    filename = Column(String, nullable=False)
+    uploaded_by = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class KnowledgeChunk(Base):
+    __tablename__ = "knowledge_chunks"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    document_id = Column(UUID(as_uuid=False), ForeignKey("knowledge_documents.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    embedding = Column(Vector(1536), nullable=True)
+    chunk_index = Column(Numeric, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)

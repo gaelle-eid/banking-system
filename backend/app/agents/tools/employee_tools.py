@@ -142,3 +142,20 @@ async def propose_approval_decision(
         f"(approval id {approval_id}). This hasn't been applied yet - "
         f"please confirm it using action id {action.id}."
     )
+
+
+
+async def search_knowledge_base(ctx: RunContext[EmployeeAgentDeps], question: str) -> str:
+    """Search internal bank policy documents to answer questions about
+    procedures, loan approval rules, compliance guidelines, etc. Use this
+    when asked about official bank policy rather than guessing."""
+    from app.core.embeddings import search_similar_chunks
+
+    results = await search_similar_chunks(ctx.deps.db, question)
+    if not results:
+        return "No relevant policy documents found. This may not be covered in our knowledge base yet."
+
+    lines = []
+    for chunk, doc_title in results:
+        lines.append(f"[From: {doc_title}]\n{chunk.content}")
+    return "\n\n---\n\n".join(lines)

@@ -1,0 +1,9 @@
+﻿Loan Approval Policy
+
+For personal loans under ,000, employees may approve requests directly without additional review.
+
+For loans between ,000 and ,000, a supervisor must co-sign the approval.
+
+For loans above ,000, the request must be escalated to the credit committee for review.
+
+All loan approvals must include a documented reason and verification of the client's income where available.
