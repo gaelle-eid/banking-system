@@ -339,3 +339,118 @@ async def recommend_card_tier(ctx: RunContext[ClientAgentDeps]) -> str:
         f"Want me to prepare a card request for you at this tier?"
     )
 
+
+
+async def propose_phone_transfer(
+    ctx: RunContext[ClientAgentDeps],
+    amount: float,
+    to_phone: str,
+    from_account_type: str | None = None,
+    from_account_nickname: str | None = None,
+) -> str:
+    """Propose a transfer to someone by their PHONE NUMBER instead of email.
+    This requires OTP verification for extra security - a code will be sent
+    to the client's email (simulating SMS), which they must provide before
+    the transfer executes. Use this when the client explicitly wants to
+    send by phone number rather than email."""
+
+    from_account, err = await _resolve_own_account(ctx, from_account_type, from_account_nickname)
+    if err:
+        return err
+
+    if from_account.balance < amount:
+        return f"Insufficient funds: {from_account.nickname} balance is {from_account.balance}, requested {amount}."
+
+    result = await ctx.deps.db.execute(select(User).where(User.phone == to_phone))
+    recipient = result.scalar_one_or_none()
+    if not recipient:
+        return "I couldn't find a client with that phone number."
+
+    result = await ctx.deps.db.execute(select(Account).where(Account.owner_id == recipient.id).limit(1))
+    to_account = result.scalar_one_or_none()
+    if not to_account:
+        return f"{recipient.full_name} doesn't have an account to receive the transfer."
+
+    import random
+    from datetime import datetime, timedelta
+    from app.models.models import TransferVerification
+    from app.core.email import send_transfer_otp_email
+
+    otp = f"{random.randint(0, 999999):06d}"
+    verification = TransferVerification(
+        initiated_by=ctx.deps.user_id,
+        from_account_id=from_account.id,
+        to_account_id=to_account.id,
+        amount=amount,
+        otp=otp,
+        otp_expires_at=datetime.utcnow() + timedelta(minutes=5),
+    )
+    ctx.deps.db.add(verification)
+    await ctx.deps.db.flush()
+
+    result = await ctx.deps.db.execute(select(User).where(User.id == ctx.deps.user_id))
+    current_user = result.scalar_one()
+    try:
+        send_transfer_otp_email(current_user.email, current_user.full_name, otp, f"{amount} {from_account.currency}", recipient.full_name)
+    except Exception:
+        pass
+
+    return (
+        f"I've prepared a transfer of {amount} from your {from_account.nickname} to {recipient.full_name} "
+        f"(via phone). For security, this needs a verification code - I've sent one to your email. "
+        f"Reply with the 6-digit code to complete the transfer. Verification id: {verification.id}"
+    )
+
+
+async def confirm_phone_transfer_otp(
+    ctx: RunContext[ClientAgentDeps],
+    verification_id: str,
+    otp: str,
+) -> str:
+    """Confirm a phone-based transfer using the OTP code the client
+    received. This actually executes the transfer if the code is correct."""
+    from datetime import datetime
+    from app.models.models import TransferVerification, Transaction, TransactionType, TransactionStatus
+    import uuid as uuid_module
+
+    result = await ctx.deps.db.execute(select(TransferVerification).where(TransferVerification.id == verification_id))
+    verification = result.scalar_one_or_none()
+    if not verification:
+        return "I couldn't find that transfer request."
+    if verification.initiated_by != ctx.deps.user_id:
+        return "This isn't your transfer to confirm."
+    if verification.verified:
+        return "This transfer was already completed."
+    if datetime.utcnow() > verification.otp_expires_at:
+        return "That code has expired. Please start the transfer again."
+    if otp != verification.otp:
+        return "That code doesn't match. Please check and try again."
+
+    from_result = await ctx.deps.db.execute(select(Account).where(Account.id == verification.from_account_id))
+    from_account = from_result.scalar_one_or_none()
+    to_result = await ctx.deps.db.execute(select(Account).where(Account.id == verification.to_account_id))
+    to_account = to_result.scalar_one_or_none()
+
+    if not from_account or not to_account:
+        return "One of the accounts no longer exists."
+    if from_account.balance < verification.amount:
+        return "Insufficient funds to complete this transfer now."
+
+    group_id = str(uuid_module.uuid4())
+    from_account.balance -= verification.amount
+    to_account.balance += verification.amount
+
+    ctx.deps.db.add(Transaction(
+        account_id=from_account.id, type=TransactionType.transfer_debit,
+        amount=verification.amount, transfer_group_id=group_id,
+        status=TransactionStatus.completed, initiated_by=ctx.deps.user_id,
+    ))
+    ctx.deps.db.add(Transaction(
+        account_id=to_account.id, type=TransactionType.transfer_credit,
+        amount=verification.amount, transfer_group_id=group_id,
+        status=TransactionStatus.completed, initiated_by=ctx.deps.user_id,
+    ))
+    verification.verified = True
+    await ctx.deps.db.flush()
+
+    return f"Transfer of {verification.amount} completed successfully."
