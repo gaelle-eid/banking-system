@@ -67,12 +67,51 @@ async def run_monthly_fixed_contributions():
         await db.commit()
 
 
+async def send_variable_goal_reminders():
+    """Run on the 1st of each month: email clients with 'variable' mode
+    goals, asking them how much they want to contribute this month."""
+    from sqlalchemy import select
+    from app.core.database import AsyncSessionLocal
+    from app.models.models import SavingsGoal, ContributionMode, User
+    from app.core.email import send_email
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(SavingsGoal).where(
+                SavingsGoal.active == True,
+                SavingsGoal.contribution_mode == ContributionMode.variable,
+            )
+        )
+        goals = result.scalars().all()
+
+        for goal in goals:
+            user_result = await db.execute(select(User).where(User.id == goal.client_id))
+            user = user_result.scalar_one_or_none()
+            if not user:
+                continue
+            try:
+                send_email(
+                    user.email, f"How much would you like to save toward {goal.name} this month?",
+                    f"<p>Hi {user.full_name},</p>"
+                    f"<p>It's a new month! Open your Assistant and let us know how much you'd like "
+                    f"to contribute to your <strong>{goal.name}</strong> goal this month.</p>",
+                )
+            except Exception:
+                pass
+
+
 def start_scheduler():
     if not scheduler.running:
         scheduler.add_job(
             run_monthly_fixed_contributions,
             trigger=CronTrigger(day=1, hour=6, minute=0),
             id="monthly_fixed_contributions",
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            send_variable_goal_reminders,
+            trigger=CronTrigger(day=1, hour=6, minute=5),
+            id="variable_goal_reminders",
             replace_existing=True,
         )
         scheduler.start()

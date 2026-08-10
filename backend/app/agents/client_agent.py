@@ -1,6 +1,6 @@
 from pydantic_ai import Agent
 from app.agents.deps import ClientAgentDeps
-from app.agents.tools.client_tools import get_my_accounts, get_transaction_history, explain_faq, propose_transfer, find_recipient_account, get_recent_recipients, recommend_card_tier, propose_phone_transfer, confirm_phone_transfer_otp, analyze_spending, propose_savings_goal
+from app.agents.tools.client_tools import get_my_accounts, get_transaction_history, explain_faq, propose_transfer, find_recipient_account, get_recent_recipients, recommend_card_tier, propose_phone_transfer, confirm_phone_transfer_otp, analyze_spending, propose_savings_goal, contribute_to_goal
 
 
 client_agent = Agent(
@@ -54,3 +54,4 @@ client_agent.tool(propose_phone_transfer)
 client_agent.tool(confirm_phone_transfer_otp)
 client_agent.tool(analyze_spending)
 client_agent.tool(propose_savings_goal)
+client_agent.tool(contribute_to_goal)

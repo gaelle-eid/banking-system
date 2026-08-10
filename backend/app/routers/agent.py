@@ -89,6 +89,46 @@ async def confirm_agent_action(
         await db.commit()
         return {"status": "executed", "transfer_group_id": group_id}
 
+
+    if action.tool_name == "goal_contribution":
+        data = json.loads(action.input)
+        source_result = await db.execute(
+            select(Account).where(Account.id == data["source_account_id"], Account.owner_id == current_user.id)
+        )
+        source_account = source_result.scalar_one_or_none()
+        if not source_account:
+            raise HTTPException(status_code=403, detail="Not your account")
+
+        goal_account_result = await db.execute(select(Account).where(Account.id == data["goal_account_id"]))
+        goal_account = goal_account_result.scalar_one_or_none()
+        if not goal_account:
+            raise HTTPException(status_code=404, detail="Goal account not found")
+
+        amount = Decimal(data["amount"])
+        if source_account.balance < amount:
+            raise HTTPException(status_code=400, detail="Insufficient funds")
+
+        group_id = str(uuid.uuid4())
+        source_account.balance -= amount
+        goal_account.balance += amount
+
+        db.add(Transaction(
+            account_id=source_account.id, type=TransactionType.transfer_debit,
+            amount=amount, transfer_group_id=group_id,
+            status=TransactionStatus.completed, initiated_by=current_user.id,
+        ))
+        db.add(Transaction(
+            account_id=goal_account.id, type=TransactionType.transfer_credit,
+            amount=amount, transfer_group_id=group_id,
+            status=TransactionStatus.completed, initiated_by=current_user.id,
+        ))
+
+        action.status = AgentActionStatus.executed
+        action.output = json.dumps({"transfer_group_id": group_id})
+        await db.commit()
+        return {"status": "executed", "goal_contribution": True, "amount": str(amount)}
+
+    
     if action.tool_name == "create_savings_goal":
         import random
 

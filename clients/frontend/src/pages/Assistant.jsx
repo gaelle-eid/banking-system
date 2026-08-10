@@ -52,9 +52,12 @@ export default function Assistant() {
   async function handleConfirm(index, actionId) {
     try {
       const res = await api.post(`/agent/client/actions/${actionId}/confirm`)
-      const confirmMessage = res.data.goal_account_nickname
-        ? `Savings goal "${res.data.goal_account_nickname}" created successfully.`
-        : 'Transfer confirmed and completed.'
+      let confirmMessage = 'Transfer confirmed and completed.'
+      if (res.data.goal_account_nickname) {
+        confirmMessage = `Savings goal "${res.data.goal_account_nickname}" created successfully.`
+      } else if (res.data.goal_contribution) {
+        confirmMessage = `Contribution of ${res.data.amount} completed successfully.`
+      }
       setMessages((prev) => [...prev, { role: 'assistant', content: confirmMessage }])
       setPendingActions((pa) => {
         const next = { ...pa }

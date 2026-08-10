@@ -560,3 +560,53 @@ async def propose_savings_goal(
         f"This will create a dedicated '{goal_name}' savings account, with contributions coming from "
         f"your {source_account.nickname}. This hasn't been created yet - please confirm using action id {action.id}."
     )
+
+
+
+async def contribute_to_goal(
+    ctx: RunContext[ClientAgentDeps],
+    goal_name: str,
+    amount: float,
+) -> str:
+    """Propose a one-time contribution to an existing savings goal
+    (used for variable/manual monthly contributions, or any extra
+    contribution the client wants to make). This does NOT execute
+    immediately - the client must confirm."""
+    from app.models.models import SavingsGoal
+
+    result = await ctx.deps.db.execute(
+        select(SavingsGoal).where(
+            SavingsGoal.client_id == ctx.deps.user_id,
+            SavingsGoal.name.ilike(goal_name),
+            SavingsGoal.active == True,
+        )
+    )
+    goal = result.scalar_one_or_none()
+    if not goal:
+        return f"I couldn't find an active goal named '{goal_name}'."
+
+    source_result = await ctx.deps.db.execute(select(Account).where(Account.id == goal.source_account_id))
+    source_account = source_result.scalar_one_or_none()
+    if not source_account:
+        return "This goal doesn't have a funding account set up."
+    if source_account.balance < amount:
+        return f"Insufficient funds: your {source_account.nickname} balance is {source_account.balance}, requested {amount}."
+
+    action = AgentActionLog(
+        conversation_id=ctx.deps.conversation_id,
+        tool_name="goal_contribution",
+        input=json.dumps({
+            "goal_id": goal.id,
+            "source_account_id": source_account.id,
+            "goal_account_id": goal.goal_account_id,
+            "amount": str(amount),
+        }),
+        status=AgentActionStatus.pending_approval,
+    )
+    ctx.deps.db.add(action)
+    await ctx.deps.db.flush()
+
+    return (
+        f"I've prepared a {amount} contribution to your '{goal.name}' goal from your "
+        f"{source_account.nickname}. This hasn't been executed yet - please confirm using action id {action.id}."
+    )
