@@ -1,13 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from pydantic import BaseModel
+from decimal import Decimal
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.models.models import SavingsGoal, Account, User
+from app.models.models import SavingsGoal, Account, User, ContributionMode
 from app.schemas.goal import SavingsGoalOut
 
 router = APIRouter(prefix="/goals", tags=["goals"])
+
+
+class SetContributionRequest(BaseModel):
+    contribution_mode: ContributionMode
+    fixed_monthly_amount: Decimal | None = None
 
 
 @router.get("/me", response_model=list[SavingsGoalOut])
@@ -48,3 +55,29 @@ async def get_goal_progress(
         "current_amount": current_balance,
         "percent_complete": percent,
     }
+
+
+@router.patch("/{goal_id}/contribution", response_model=SavingsGoalOut)
+async def set_contribution_mode(
+    goal_id: str,
+    payload: SetContributionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(SavingsGoal).where(SavingsGoal.id == goal_id))
+    goal = result.scalar_one_or_none()
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    if goal.client_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your goal")
+
+    if payload.contribution_mode == ContributionMode.fixed and not payload.fixed_monthly_amount:
+        raise HTTPException(status_code=400, detail="fixed_monthly_amount is required for fixed contribution mode")
+
+    goal.contribution_mode = payload.contribution_mode
+    goal.fixed_monthly_amount = payload.fixed_monthly_amount
+
+    await db.commit()
+    await db.refresh(goal)
+    return goal
+

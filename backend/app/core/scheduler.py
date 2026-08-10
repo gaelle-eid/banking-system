@@ -4,8 +4,77 @@ from apscheduler.triggers.cron import CronTrigger
 scheduler = AsyncIOScheduler()
 
 
+async def run_monthly_fixed_contributions():
+    """Run on the 1st of each month: move each goal's fixed_monthly_amount
+    from its source account to its goal account, for goals in 'fixed' mode."""
+    from sqlalchemy import select
+    from app.core.database import AsyncSessionLocal
+    from app.models.models import SavingsGoal, ContributionMode, Account, Transaction, TransactionType, TransactionStatus, User
+    from app.core.email import send_email
+    import uuid
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(SavingsGoal).where(
+                SavingsGoal.active == True,
+                SavingsGoal.contribution_mode == ContributionMode.fixed,
+                SavingsGoal.fixed_monthly_amount.isnot(None),
+            )
+        )
+        goals = result.scalars().all()
+
+        for goal in goals:
+            source_result = await db.execute(select(Account).where(Account.id == goal.source_account_id))
+            source_account = source_result.scalar_one_or_none()
+            goal_result = await db.execute(select(Account).where(Account.id == goal.goal_account_id))
+            goal_account = goal_result.scalar_one_or_none()
+
+            if not source_account or not goal_account:
+                continue
+            if source_account.balance < goal.fixed_monthly_amount:
+                continue  # skip silently if insufficient funds this month
+
+            group_id = str(uuid.uuid4())
+            source_account.balance -= goal.fixed_monthly_amount
+            goal_account.balance += goal.fixed_monthly_amount
+
+            db.add(Transaction(
+                account_id=source_account.id, type=TransactionType.transfer_debit,
+                amount=goal.fixed_monthly_amount, transfer_group_id=group_id,
+                status=TransactionStatus.completed, initiated_by=goal.client_id,
+            ))
+            db.add(Transaction(
+                account_id=goal_account.id, type=TransactionType.transfer_credit,
+                amount=goal.fixed_monthly_amount, transfer_group_id=group_id,
+                status=TransactionStatus.completed, initiated_by=goal.client_id,
+            ))
+
+            user_result = await db.execute(select(User).where(User.id == goal.client_id))
+            user = user_result.scalar_one_or_none()
+            if user:
+                try:
+                    send_email(
+                        user.email, f"Monthly savings contribution: {goal.name}",
+                        f"<p>Hi {user.full_name},</p>"
+                        f"<p>We moved <strong>{goal.fixed_monthly_amount} {goal_account.currency}</strong> "
+                        f"from your {source_account.nickname or source_account.type.value} account into "
+                        f"your <strong>{goal.name}</strong> savings goal, as scheduled.</p>"
+                        f"<p>New {goal.name} balance: {goal_account.balance} {goal_account.currency}</p>",
+                    )
+                except Exception:
+                    pass
+
+        await db.commit()
+
+
 def start_scheduler():
     if not scheduler.running:
+        scheduler.add_job(
+            run_monthly_fixed_contributions,
+            trigger=CronTrigger(day=1, hour=6, minute=0),
+            id="monthly_fixed_contributions",
+            replace_existing=True,
+        )
         scheduler.start()
 
 
