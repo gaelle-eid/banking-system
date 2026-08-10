@@ -454,3 +454,70 @@ async def confirm_phone_transfer_otp(
     await ctx.deps.db.flush()
 
     return f"Transfer of {verification.amount} completed successfully."
+
+
+async def analyze_spending(ctx: RunContext[ClientAgentDeps], account_nickname: str | None = None) -> str:
+    """Analyze the client's recent spending (withdrawals and outgoing
+    transfers) and give concrete, actionable advice on where they could
+    cut back to save money - e.g. 'reduce X by 10% to save $Y/month'.
+    If account_nickname is given, analyze just that account; otherwise
+    analyze across all their accounts."""
+
+    if account_nickname:
+        account, err = await _resolve_own_account(ctx, None, account_nickname)
+        if err:
+            return err
+        account_ids = [account.id]
+    else:
+        result = await ctx.deps.db.execute(select(Account).where(Account.owner_id == ctx.deps.user_id))
+        accounts = result.scalars().all()
+        if not accounts:
+            return "You don't have any accounts yet."
+        account_ids = [a.id for a in accounts]
+
+    from datetime import datetime, timedelta
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+
+    result = await ctx.deps.db.execute(
+        select(Transaction).where(
+            Transaction.account_id.in_(account_ids),
+            Transaction.type.in_(["withdrawal", "transfer_debit"]),
+            Transaction.created_at >= thirty_days_ago,
+        )
+    )
+    outgoing_txs = result.scalars().all()
+
+    if not outgoing_txs:
+        return "You haven't had any outgoing transactions in the last 30 days - nothing to analyze yet."
+
+    total_outgoing = sum(float(t.amount) for t in outgoing_txs)
+    withdrawal_total = sum(float(t.amount) for t in outgoing_txs if t.type.value == "withdrawal")
+    transfer_total = sum(float(t.amount) for t in outgoing_txs if t.type.value == "transfer_debit")
+    tx_count = len(outgoing_txs)
+    avg_tx = total_outgoing / tx_count if tx_count else 0
+
+    potential_savings_10pct = total_outgoing * 0.10
+
+    lines = [
+        f"Spending analysis (last 30 days):",
+        f"- Total outgoing: {total_outgoing:.2f} across {tx_count} transactions",
+        f"- Withdrawals: {withdrawal_total:.2f}",
+        f"- Outgoing transfers: {transfer_total:.2f}",
+        f"- Average transaction size: {avg_tx:.2f}",
+        "",
+        f"If you reduced overall outgoing spending by just 10%, you'd save "
+        f"approximately {potential_savings_10pct:.2f} per month.",
+    ]
+
+    if withdrawal_total > transfer_total:
+        lines.append(
+            "Most of your outgoing money is cash withdrawals - consider tracking what these "
+            "are for, since cash spending is often the easiest place to trim."
+        )
+    elif tx_count > 10:
+        lines.append(
+            f"You have a high number of transactions ({tx_count}) - frequent small transfers "
+            "can add up. Consolidating them might help you spend more intentionally."
+        )
+
+    return "\n".join(lines)

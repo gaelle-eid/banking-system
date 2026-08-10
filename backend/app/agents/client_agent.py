@@ -1,6 +1,6 @@
 from pydantic_ai import Agent
 from app.agents.deps import ClientAgentDeps
-from app.agents.tools.client_tools import get_my_accounts, get_transaction_history, explain_faq, propose_transfer, find_recipient_account, get_recent_recipients, recommend_card_tier, propose_phone_transfer, confirm_phone_transfer_otp
+from app.agents.tools.client_tools import get_my_accounts, get_transaction_history, explain_faq, propose_transfer, find_recipient_account, get_recent_recipients, recommend_card_tier, propose_phone_transfer, confirm_phone_transfer_otp, analyze_spending
 
 client_agent = Agent(
     "gateway/openai:gpt-5.2",
@@ -35,6 +35,8 @@ client_agent = Agent(
         "must separately confirm it. Always tell them clearly that "
         "confirmation is required and mention the action id (for email-based "
         "transfers) or verification id (for phone-based transfers). "
+        "You can also analyze the client's spending and give concrete, "
+        "actionable savings advice when asked (e.g. about saving for a goal). "
         "Be concise and friendly. Never make up account numbers, balances, "
         "or transaction data - only use what the tools return."
     ),
@@ -49,3 +51,4 @@ client_agent.tool(get_recent_recipients)
 client_agent.tool(recommend_card_tier)
 client_agent.tool(propose_phone_transfer)
 client_agent.tool(confirm_phone_transfer_otp)
+client_agent.tool(analyze_spending)
