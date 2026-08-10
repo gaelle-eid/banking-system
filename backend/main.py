@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth, accounts, transactions, loans, cards, statements, agent, approvals, audit, employees, reports, admin, employee_agent, registrations, knowledge, goals
+from app.core.scheduler import start_scheduler, stop_scheduler
+
 app = FastAPI(title="Banking System API")
 
 app.add_middleware(
@@ -26,8 +28,17 @@ app.include_router(admin.router)
 app.include_router(employee_agent.router)
 app.include_router(registrations.router)
 app.include_router(knowledge.router)
-app.include_router(goals.router)    
+app.include_router(goals.router)
 
+
+@app.on_event("startup")
+async def on_startup():
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    stop_scheduler()
 
 
 @app.get("/health")
