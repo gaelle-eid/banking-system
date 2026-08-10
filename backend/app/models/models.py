@@ -315,3 +315,23 @@ class KnowledgeChunk(Base):
     embedding = Column(Vector(1536), nullable=True)
     chunk_index = Column(Numeric, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ContributionMode(str, enum.Enum):
+    fixed = "fixed"
+    variable = "variable"
+
+
+class SavingsGoal(Base):
+    __tablename__ = "savings_goals"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    client_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    name = Column(String, nullable=False)
+    target_amount = Column(Numeric(14, 2), nullable=False)
+    goal_account_id = Column(UUID(as_uuid=False), ForeignKey("accounts.id"), nullable=True)
+    source_account_id = Column(UUID(as_uuid=False), ForeignKey("accounts.id"), nullable=True)
+    contribution_mode = Column(Enum(ContributionMode), nullable=True)
+    fixed_monthly_amount = Column(Numeric(14, 2), nullable=True)
+    active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
