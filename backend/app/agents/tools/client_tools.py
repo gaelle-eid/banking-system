@@ -521,3 +521,42 @@ async def analyze_spending(ctx: RunContext[ClientAgentDeps], account_nickname: s
         )
 
     return "\n".join(lines)
+
+
+
+async def propose_savings_goal(
+    ctx: RunContext[ClientAgentDeps],
+    goal_name: str,
+    target_amount: float,
+    source_account_type: str | None = None,
+    source_account_nickname: str | None = None,
+) -> str:
+    """Propose creating a new savings goal with a dedicated account
+    (e.g. 'Car', 'Vacation', 'Emergency Fund'). This creates a pending
+    action the client must confirm before the goal account is actually
+    created. source_account_type/nickname identifies which of the
+    client's accounts contributions would come from later (checking,
+    typically)."""
+
+    source_account, err = await _resolve_own_account(ctx, source_account_type, source_account_nickname)
+    if err:
+        return err
+
+    action = AgentActionLog(
+        conversation_id=ctx.deps.conversation_id,
+        tool_name="create_savings_goal",
+        input=json.dumps({
+            "goal_name": goal_name,
+            "target_amount": str(target_amount),
+            "source_account_id": source_account.id,
+        }),
+        status=AgentActionStatus.pending_approval,
+    )
+    ctx.deps.db.add(action)
+    await ctx.deps.db.flush()
+
+    return (
+        f"I've prepared a new savings goal called '{goal_name}' with a target of {target_amount}. "
+        f"This will create a dedicated '{goal_name}' savings account, with contributions coming from "
+        f"your {source_account.nickname}. This hasn't been created yet - please confirm using action id {action.id}."
+    )

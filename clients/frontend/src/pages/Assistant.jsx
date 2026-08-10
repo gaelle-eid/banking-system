@@ -51,8 +51,11 @@ export default function Assistant() {
 
   async function handleConfirm(index, actionId) {
     try {
-      await api.post(`/agent/client/actions/${actionId}/confirm`)
-      setMessages((prev) => [...prev, { role: 'assistant', content: 'Transfer confirmed and completed.' }])
+      const res = await api.post(`/agent/client/actions/${actionId}/confirm`)
+      const confirmMessage = res.data.goal_account_nickname
+        ? `Savings goal "${res.data.goal_account_nickname}" created successfully.`
+        : 'Transfer confirmed and completed.'
+      setMessages((prev) => [...prev, { role: 'assistant', content: confirmMessage }])
       setPendingActions((pa) => {
         const next = { ...pa }
         delete next[index]
