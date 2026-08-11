@@ -9,9 +9,11 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.email import send_transaction_email
 from app.core.limits import check_transaction_limits
+from app.core.fraud_detection import check_transaction_for_fraud
 from app.models.models import Account, Transaction, TransactionType, TransactionStatus, User, TransferVerification
 from app.schemas.transaction import DepositRequest, WithdrawalRequest, TransferRequest, TransactionOut, PhoneTransferInitiateRequest, PhoneTransferConfirmRequest
 from app.core.email import send_transfer_otp_email
+
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 
@@ -62,6 +64,12 @@ async def deposit(
     except Exception:
         pass
 
+    try:
+        await check_transaction_for_fraud(db, account, tx, current_user)
+        await db.commit()
+    except Exception:
+        pass
+
     return tx
 
 
@@ -100,6 +108,12 @@ async def withdraw(
             account.nickname or account.type.value,
             f"{account.balance} {account.currency}",
         )
+    except Exception:
+        pass
+
+    try:
+        await check_transaction_for_fraud(db, account, tx, current_user)
+        await db.commit()
     except Exception:
         pass
 
@@ -176,6 +190,12 @@ async def transfer(
     except Exception:
         pass
 
+    try:
+        await check_transaction_for_fraud(db, from_account, debit_tx, current_user)
+        await db.commit()
+    except Exception:
+        pass
+
     return [debit_tx, credit_tx]
 
 
@@ -185,12 +205,11 @@ async def get_account_transactions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await _get_owned_account(db, account_id, current_user, allow_closed=True)  # viewing history is fine even if closed
+    await _get_owned_account(db, account_id, current_user, allow_closed=True)
     result = await db.execute(
         select(Transaction).where(Transaction.account_id == account_id).order_by(Transaction.created_at.desc())
     )
     return result.scalars().all()
-
 
 
 @router.get("/recipients/recent")
@@ -231,7 +250,7 @@ async def get_recent_recipients(
         account_result = await db.execute(select(Account).where(Account.id == credit.account_id))
         recipient_account = account_result.scalar_one_or_none()
         if not recipient_account or recipient_account.owner_id == current_user.id:
-            continue  # skip transfers to your own other accounts
+            continue
 
         user_result = await db.execute(select(User).where(User.id == recipient_account.owner_id))
         recipient_user = user_result.scalar_one_or_none()
@@ -354,6 +373,12 @@ async def confirm_phone_transfer(
             from_account.nickname or from_account.type.value,
             f"{from_account.balance} {from_account.currency}",
         )
+    except Exception:
+        pass
+
+    try:
+        await check_transaction_for_fraud(db, from_account, debit_tx, current_user)
+        await db.commit()
     except Exception:
         pass
 
