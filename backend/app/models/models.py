@@ -335,3 +335,29 @@ class SavingsGoal(Base):
     fixed_monthly_amount = Column(Numeric(14, 2), nullable=True)
     active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FraudFlagStatus(str, enum.Enum):
+    pending = "pending"
+    cleared = "cleared"
+    confirmed_fraud = "confirmed_fraud"
+
+
+class FraudFlagSeverity(str, enum.Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
+class FraudFlag(Base):
+    __tablename__ = "fraud_flags"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    transaction_id = Column(UUID(as_uuid=False), ForeignKey("transactions.id"), nullable=False)
+    account_id = Column(UUID(as_uuid=False), ForeignKey("accounts.id"), nullable=False)
+    reason = Column(Text, nullable=False)
+    severity = Column(Enum(FraudFlagSeverity), nullable=False)
+    status = Column(Enum(FraudFlagStatus), default=FraudFlagStatus.pending, nullable=False)
+    reviewed_by = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
