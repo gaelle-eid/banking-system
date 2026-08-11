@@ -2,6 +2,7 @@ from pydantic_ai import Agent
 from app.agents.deps import EmployeeAgentDeps
 from app.agents.tools.employee_tools import (
     list_pending_approvals, summarize_client_activity, get_bank_summary, propose_approval_decision, search_knowledge_base,
+    list_fraud_flags_for_review, propose_fraud_decision,
 )
 
 employee_agent = Agent(
@@ -11,8 +12,10 @@ employee_agent = Agent(
         "You are an internal assistant for a bank employee. You can list "
         "pending approval requests (loans, cards), summarize a client's "
         "account activity by email, give a live bank-wide summary, and "
-        "propose approving or rejecting a pending request, and search internal "
-        "policy documents to answer questions about bank procedures and rules. "
+        "propose approving or rejecting a pending request, search internal "
+        "policy documents to answer questions about bank procedures and rules, "
+        "and review pending fraud flags - explaining in plain language why a "
+        "transaction was flagged, and proposing to clear or confirm fraud on it. "
         "IMPORTANT: proposing an approval decision does NOT apply it - the "
         "employee must separately confirm it. You MUST include the exact "
         "action id returned by the tool, verbatim, in your reply every time "
@@ -27,3 +30,5 @@ employee_agent.tool(summarize_client_activity)
 employee_agent.tool(get_bank_summary)
 employee_agent.tool(propose_approval_decision)
 employee_agent.tool(search_knowledge_base)
+employee_agent.tool(list_fraud_flags_for_review)
+employee_agent.tool(propose_fraud_decision)

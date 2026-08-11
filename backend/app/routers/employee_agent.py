@@ -10,6 +10,7 @@ from app.core.audit import log_action
 from app.models.models import (
     User, UserRole, AgentType, AgentActionLog, AgentActionStatus,
     Approval, ApprovalStatus, ApprovalEntityType, Loan, LoanStatus, Card, CardStatus,
+    FraudFlag, FraudFlagStatus, Account, AccountStatus,
 )
 from app.schemas.employee_agent import EmployeeChatRequest, EmployeeChatResponse
 from app.agents.employee_agent import employee_agent
@@ -100,6 +101,40 @@ async def confirm_employee_action(
         action.output = json.dumps({"approval_id": approval.id, "decision": decision})
         await db.commit()
         return {"status": "executed", "decision": decision, "approval_id": approval.id}
+
+    if action.tool_name == "fraud_decision":
+        data = json.loads(action.input)
+        flag_result = await db.execute(select(FraudFlag).where(FraudFlag.id == data["flag_id"]))
+        flag = flag_result.scalar_one_or_none()
+        if not flag:
+            raise HTTPException(status_code=404, detail="Fraud flag not found")
+        if flag.status != FraudFlagStatus.pending:
+            raise HTTPException(status_code=400, detail=f"Flag is already {flag.status.value}")
+
+        decision = data["decision"]
+        notes = data.get("notes")
+
+        if decision == "clear":
+            flag.status = FraudFlagStatus.cleared
+        else:
+            flag.status = FraudFlagStatus.confirmed_fraud
+            account_result = await db.execute(select(Account).where(Account.id == flag.account_id))
+            account = account_result.scalar_one_or_none()
+            if account:
+                account.status = AccountStatus.frozen
+
+        flag.reviewed_by = current_user.id
+        flag.notes = notes
+
+        await log_action(
+            db, current_user.id, "cleared" if decision == "clear" else "confirmed_fraud",
+            "fraud_flag", flag.id, details={"notes": notes, "via": "agent"},
+        )
+
+        action.status = AgentActionStatus.executed
+        action.output = json.dumps({"flag_id": flag.id, "decision": decision})
+        await db.commit()
+        return {"status": "executed", "decision": decision, "flag_id": flag.id}
 
     raise HTTPException(status_code=400, detail="Unknown action type")
 

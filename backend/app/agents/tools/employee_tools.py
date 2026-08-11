@@ -159,3 +159,72 @@ async def search_knowledge_base(ctx: RunContext[EmployeeAgentDeps], question: st
     for chunk, doc_title in results:
         lines.append(f"[From: {doc_title}]\n{chunk.content}")
     return "\n\n---\n\n".join(lines)
+
+
+async def list_fraud_flags_for_review(ctx: RunContext[EmployeeAgentDeps]) -> str:
+    """List pending fraud flags awaiting employee review, with the
+    client's name and a plain-language explanation of why each was
+    flagged."""
+    from app.models.models import FraudFlag, FraudFlagStatus, Transaction, Account, User
+
+    result = await ctx.deps.db.execute(
+        select(FraudFlag).where(FraudFlag.status == FraudFlagStatus.pending).order_by(FraudFlag.created_at.asc())
+    )
+    flags = result.scalars().all()
+
+    if not flags:
+        return "There are no pending fraud flags right now."
+
+    lines = []
+    for flag in flags:
+        acc_result = await ctx.deps.db.execute(select(Account).where(Account.id == flag.account_id))
+        account = acc_result.scalar_one_or_none()
+        owner_name = "unknown client"
+        if account:
+            user_result = await ctx.deps.db.execute(select(User).where(User.id == account.owner_id))
+            owner = user_result.scalar_one_or_none()
+            if owner:
+                owner_name = owner.full_name
+
+        lines.append(
+            f"[flag_id: {flag.id}] {owner_name} - severity {flag.severity.value} - {flag.reason}"
+        )
+    return "\n".join(lines)
+
+
+async def propose_fraud_decision(
+    ctx: RunContext[EmployeeAgentDeps],
+    flag_id: str,
+    decision: str,
+    notes: str | None = None,
+) -> str:
+    """Propose a decision on a fraud flag: 'clear' (mark as legitimate)
+    or 'confirm' (confirm fraud, which will freeze the account). This
+    does NOT execute immediately - the employee must confirm separately."""
+
+    if decision not in ("clear", "confirm"):
+        return "Decision must be either 'clear' or 'confirm'."
+
+    from app.models.models import FraudFlag, FraudFlagStatus
+
+    result = await ctx.deps.db.execute(select(FraudFlag).where(FraudFlag.id == flag_id))
+    flag = result.scalar_one_or_none()
+    if not flag:
+        return "I couldn't find a fraud flag with that id."
+    if flag.status != FraudFlagStatus.pending:
+        return f"This flag is already {flag.status.value}, nothing to do."
+
+    action = AgentActionLog(
+        conversation_id=ctx.deps.conversation_id,
+        tool_name="fraud_decision",
+        input=json.dumps({"flag_id": flag_id, "decision": decision, "notes": notes}),
+        status=AgentActionStatus.pending_approval,
+    )
+    ctx.deps.db.add(action)
+    await ctx.deps.db.flush()
+
+    action_word = "clear this flag as legitimate" if decision == "clear" else "confirm fraud and freeze the account"
+    return (
+        f"I've prepared a decision to {action_word} for flag {flag_id}. "
+        f"This hasn't been applied yet - please confirm using action id {action.id}."
+    )

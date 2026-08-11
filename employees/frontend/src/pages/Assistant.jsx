@@ -17,8 +17,8 @@ export default function Assistant() {
   }, [messages])
 
   function extractActionId(text) {
-    const match = text.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i)
-    return match ? match[0] : null
+    const labeledMatch = text.match(/action\s*id[:\s]*([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i)
+    return labeledMatch ? labeledMatch[1] : null
   }
 
   async function sendMessage(e) {

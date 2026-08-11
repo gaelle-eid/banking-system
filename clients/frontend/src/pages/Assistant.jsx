@@ -9,7 +9,7 @@ export default function Assistant() {
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [pendingActions, setPendingActions] = useState({}) // messageIndex -> actionId
+  const [pendingActions, setPendingActions] = useState({})
   const bottomRef = useRef(null)
 
   useEffect(() => {
@@ -17,16 +17,15 @@ export default function Assistant() {
   }, [messages])
 
   function extractActionId(text) {
-    const match = text.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i)
-    return match ? match[0] : null
+    const labeledMatch = text.match(/action\s*id[:\s]*([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i)
+    return labeledMatch ? labeledMatch[1] : null
   }
 
   async function sendMessage(e) {
     e.preventDefault()
     if (!input.trim()) return
 
-    const userMessage = { role: 'user', content: input }
-    setMessages((prev) => [...prev, userMessage])
+    setMessages((prev) => [...prev, { role: 'user', content: input }])
     setInput('')
     setLoading(true)
 
@@ -43,7 +42,7 @@ export default function Assistant() {
         return newMessages
       })
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }])
+      setMessages((prev) => [...prev, { role: 'assistant', content: 'Sorry, something went wrong.' }])
     } finally {
       setLoading(false)
     }
@@ -59,27 +58,19 @@ export default function Assistant() {
         confirmMessage = `Contribution of ${res.data.amount} completed successfully.`
       }
       setMessages((prev) => [...prev, { role: 'assistant', content: confirmMessage }])
-      setPendingActions((pa) => {
-        const next = { ...pa }
-        delete next[index]
-        return next
-      })
+      setPendingActions((pa) => { const n = { ...pa }; delete n[index]; return n })
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'assistant', content: err.response?.data?.detail || 'Could not confirm the action.' }])
+      setMessages((prev) => [...prev, { role: 'assistant', content: err.response?.data?.detail || 'Could not confirm.' }])
     }
   }
 
   async function handleReject(index, actionId) {
     try {
       await api.post(`/agent/client/actions/${actionId}/reject`)
-      setMessages((prev) => [...prev, { role: 'assistant', content: 'Transfer cancelled.' }])
-      setPendingActions((pa) => {
-        const next = { ...pa }
-        delete next[index]
-        return next
-      })
+      setMessages((prev) => [...prev, { role: 'assistant', content: 'Cancelled.' }])
+      setPendingActions((pa) => { const n = { ...pa }; delete n[index]; return n })
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'assistant', content: err.response?.data?.detail || 'Could not cancel the action.' }])
+      setMessages((prev) => [...prev, { role: 'assistant', content: err.response?.data?.detail || 'Could not cancel.' }])
     }
   }
 
@@ -99,46 +90,24 @@ export default function Assistant() {
                 </div>
                 {pendingActions[i] && (
                   <div className="flex gap-2 mt-3">
-                    <button
-                      onClick={() => handleConfirm(i, pendingActions[i])}
-                      className="px-3 py-1.5 bg-crimson-600 text-white rounded-lg text-xs font-medium hover:bg-crimson-700 transition"
-                    >
-                      Confirm
-                    </button>
-                    <button
-                      onClick={() => handleReject(i, pendingActions[i])}
-                      className="px-3 py-1.5 border border-stone-300 text-ink-950 rounded-lg text-xs font-medium hover:bg-white transition"
-                    >
-                      Cancel
-                    </button>
+                    <button onClick={() => handleConfirm(i, pendingActions[i])} className="px-3 py-1.5 bg-crimson-600 text-white rounded-lg text-xs font-medium hover:bg-crimson-700 transition">Confirm</button>
+                    <button onClick={() => handleReject(i, pendingActions[i])} className="px-3 py-1.5 border border-stone-300 text-ink-950 rounded-lg text-xs font-medium hover:bg-white transition">Cancel</button>
                   </div>
                 )}
               </div>
             </div>
           ))}
-          {loading && (
-            <div className="flex justify-start">
-              <div className="bg-paper-50 rounded-2xl px-4 py-2.5 text-sm text-stone-500">Thinking...</div>
-            </div>
-          )}
+          {loading && <div className="flex justify-start"><div className="bg-paper-50 rounded-2xl px-4 py-2.5 text-sm text-stone-500">Thinking...</div></div>}
           <div ref={bottomRef} />
         </div>
 
         <form onSubmit={sendMessage} className="border-t border-stone-300/40 p-3 flex gap-2">
           <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about your accounts, or request a transfer..."
+            type="text" value={input} onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask about your accounts, transfers, or savings goals..."
             className="flex-1 px-3 py-2 border border-stone-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-crimson-600"
           />
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-4 py-2 bg-crimson-600 text-white rounded-lg text-sm font-medium hover:bg-crimson-700 transition disabled:opacity-50"
-          >
-            Send
-          </button>
+          <button type="submit" disabled={loading} className="px-4 py-2 bg-crimson-600 text-white rounded-lg text-sm font-medium hover:bg-crimson-700 transition disabled:opacity-50">Send</button>
         </form>
       </div>
     </Layout>
