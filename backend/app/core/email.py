@@ -66,6 +66,18 @@ def send_transaction_email(to: str, full_name: str, tx_type: str, amount: str, a
     """
     return send_email(to, f"Transaction alert: {tx_type.replace('_', ' ').title()}", html)
 
+def send_joint_invitation_email(to: str, full_name: str, inviter_name: str, account_label: str):
+    html = f"""
+    <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
+      <h2>You've been invited to a joint account</h2>
+      <p>Hi {full_name},</p>
+      <p><strong>{inviter_name}</strong> has invited you to become a joint owner on their <strong>{account_label}</strong> account.</p>
+      <p>Log in to your account to accept or decline this invitation.</p>
+      <p style="color:#8A93A6;font-size:12px;">If you weren't expecting this, you can safely decline it.</p>
+    </div>
+    """
+    return send_email(to, f"{inviter_name} invited you to a joint account", html)
+
 
 def send_phone_otp_email(to: str, full_name: str, otp: str):
     html = f"""

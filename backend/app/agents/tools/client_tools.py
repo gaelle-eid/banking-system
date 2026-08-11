@@ -3,6 +3,7 @@ from pydantic_ai import RunContext
 from sqlalchemy import select
 import re
 from app.agents.deps import ClientAgentDeps
+from app.core.account_access import get_accessible_accounts, get_accessible_account_ids
 from app.models.models import Account, Transaction, User, AgentActionLog, AgentActionStatus
 
 
@@ -14,18 +15,16 @@ async def get_my_accounts(ctx: RunContext[ClientAgentDeps]) -> str:
     """Get a summary of the client's accounts and balances. ALWAYS refer to
     accounts by their nickname when talking to the client - never mention
     the internal id or full account number."""
-    result = await ctx.deps.db.execute(
-        select(Account).where(Account.owner_id == ctx.deps.user_id)
-    )
-    accounts = result.scalars().all()
+    accounts = await get_accessible_accounts(ctx.deps.db, ctx.deps.user_id)
     if not accounts:
         return "You have no accounts yet."
 
     lines = []
     for acc in accounts:
         display_name = acc.nickname or f"{acc.type.value.capitalize()} {mask_account_number(acc.account_number)}"
+        joint_note = " [joint account]" if acc.owner_id != ctx.deps.user_id else ""
         lines.append(
-            f"{display_name} ({acc.type.value}, {mask_account_number(acc.account_number)}): "
+            f"{display_name}{joint_note} ({acc.type.value}, {mask_account_number(acc.account_number)}): "
             f"{acc.balance} {acc.currency}"
         )
     return "\n".join(lines)
@@ -34,13 +33,11 @@ async def get_my_accounts(ctx: RunContext[ClientAgentDeps]) -> str:
 async def get_transaction_history(ctx: RunContext[ClientAgentDeps], account_nickname: str, limit: int = 10) -> str:
     """Get recent transaction history for one of the client's accounts,
     identified by its nickname (e.g. 'Emergency Fund', 'Checking 1')."""
-    result = await ctx.deps.db.execute(
-        select(Account).where(
-            Account.owner_id == ctx.deps.user_id,
-            Account.nickname.ilike(account_nickname),
-        )
+    accessible_accounts = await get_accessible_accounts(ctx.deps.db, ctx.deps.user_id)
+    account = next(
+        (a for a in accessible_accounts if a.nickname and a.nickname.lower() == account_nickname.strip().lower()),
+        None,
     )
-    account = result.scalar_one_or_none()
     if not account:
         return "I couldn't find an account with that nickname. Ask me to list your accounts if you're not sure of the name."
 
@@ -82,10 +79,7 @@ async def _resolve_own_account(ctx: RunContext[ClientAgentDeps], account_type: s
     or by the last 4 digits if the client used a masked-number label like
     'Checking ••••0001', or by type."""
     if account_nickname:
-        result = await ctx.deps.db.execute(
-            select(Account).where(Account.owner_id == ctx.deps.user_id)
-        )
-        all_accounts = result.scalars().all()
+        all_accounts = await get_accessible_accounts(ctx.deps.db, ctx.deps.user_id)
 
         # Try exact/partial nickname match first
         for acc in all_accounts:
@@ -105,13 +99,8 @@ async def _resolve_own_account(ctx: RunContext[ClientAgentDeps], account_type: s
         return None, f"I couldn't find an account matching '{account_nickname}'."
 
     if account_type:
-        result = await ctx.deps.db.execute(
-            select(Account).where(
-                Account.owner_id == ctx.deps.user_id,
-                Account.type == account_type.lower(),
-            )
-        )
-        matches = result.scalars().all()
+        all_accounts = await get_accessible_accounts(ctx.deps.db, ctx.deps.user_id)
+        matches = [a for a in all_accounts if a.type.value == account_type.lower()]
         if not matches:
             return None, f"You don't have a {account_type} account."
         if len(matches) > 1:
@@ -240,8 +229,7 @@ async def find_recipient_account(ctx: RunContext[ClientAgentDeps], recipient_ema
 async def get_recent_recipients(ctx: RunContext[ClientAgentDeps]) -> str:
     """Get a list of people the client has sent money to before, so they
     can be referred to by name instead of needing their email again."""
-    my_accounts_result = await ctx.deps.db.execute(select(Account).where(Account.owner_id == ctx.deps.user_id))
-    my_account_ids = [a.id for a in my_accounts_result.scalars().all()]
+    my_account_ids = await get_accessible_account_ids(ctx.deps.db, ctx.deps.user_id)
     if not my_account_ids:
         return "You haven't sent any transfers yet."
 
@@ -271,7 +259,7 @@ async def get_recent_recipients(ctx: RunContext[ClientAgentDeps]) -> str:
             continue
         acc_result = await ctx.deps.db.execute(select(Account).where(Account.id == credit.account_id))
         recipient_account = acc_result.scalar_one_or_none()
-        if not recipient_account or recipient_account.owner_id == ctx.deps.user_id:
+        if not recipient_account or recipient_account.id in my_account_ids:
             continue
         user_result = await ctx.deps.db.execute(select(User).where(User.id == recipient_account.owner_id))
         recipient_user = user_result.scalar_one_or_none()
@@ -287,10 +275,7 @@ async def recommend_card_tier(ctx: RunContext[ClientAgentDeps]) -> str:
     """Analyze the client's transaction history and recommend a card tier
     (standard, cashback, travel, or premium) with reasoning based on their
     spending patterns and account balances."""
-    accounts_result = await ctx.deps.db.execute(
-        select(Account).where(Account.owner_id == ctx.deps.user_id)
-    )
-    accounts = accounts_result.scalars().all()
+    accounts = await get_accessible_accounts(ctx.deps.db, ctx.deps.user_id)
     if not accounts:
         return "You need at least one account before I can recommend a card."
 
@@ -469,8 +454,7 @@ async def analyze_spending(ctx: RunContext[ClientAgentDeps], account_nickname: s
             return err
         account_ids = [account.id]
     else:
-        result = await ctx.deps.db.execute(select(Account).where(Account.owner_id == ctx.deps.user_id))
-        accounts = result.scalars().all()
+        accounts = await get_accessible_accounts(ctx.deps.db, ctx.deps.user_id)
         if not accounts:
             return "You don't have any accounts yet."
         account_ids = [a.id for a in accounts]

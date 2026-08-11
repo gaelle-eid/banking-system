@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import Layout from '../components/Layout'
+import PhoneTransferForm from '../components/PhoneTransferForm'
+import JointOwners from '../components/JointOwners'
 import { formatMoney, formatDate } from '../lib/format'
 import { useToast } from '../context/ToastContext'
-import PhoneTransferForm from '../components/PhoneTransferForm'
 export default function AccountDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -129,7 +130,14 @@ export default function AccountDetail() {
           style={{ background: 'linear-gradient(120deg, transparent 40%, rgba(196,30,58,0.35) 75%, rgba(196,30,58,0.55) 100%)' }}
         />
         <div className="relative">
-          <span className="text-xs uppercase tracking-wide text-stone-300">{account.nickname || account.type}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs uppercase tracking-wide text-stone-300">{account.nickname || account.type}</span>
+            {account.is_joint && (
+              <span className="text-[10px] uppercase tracking-wide bg-white/15 text-white px-2 py-0.5 rounded-full">
+                Joint
+              </span>
+            )}
+          </div>
           <p className="font-mono text-3xl font-medium mt-2 mb-1 tracking-tight">
             {formatMoney(account.balance, account.currency)}
           </p>
@@ -146,9 +154,26 @@ export default function AccountDetail() {
         </button>
       )}
 
+      {account.status === 'active' && (
+        <button
+          onClick={() => setShowCloseConfirm(true)}
+          className="text-sm text-crimson-600 hover:underline mb-6"
+        >
+          Close this account
+        </button>
+      )}
+
       {account.status === 'closed' && (
         <div className="bg-stone-300/20 text-stone-500 text-sm rounded-lg px-4 py-3 mb-6">
           This account is closed.
+        </div>
+      )}
+
+      <JointOwners account={account} onChange={loadData} />
+
+      {showCloseConfirm && (
+        <div className="bg-white rounded-xl border border-crimson-600/40 p-4 mb-6 max-w-sm">
+          ...
         </div>
       )}
 

@@ -18,9 +18,16 @@ export default function AccountCard({ account }) {
       />
       <div className="relative">
         <div className="flex justify-between items-start mb-10">
-          <span className="text-xs uppercase tracking-wide text-stone-300">
-            {account.nickname || account.type}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs uppercase tracking-wide text-stone-300">
+              {account.nickname || account.type}
+            </span>
+            {account.is_joint && (
+              <span className="text-[10px] uppercase tracking-wide bg-white/15 text-white px-2 py-0.5 rounded-full">
+                Joint
+              </span>
+            )}
+          </div>
           {/* chip glyph */}
           <svg width="28" height="20" viewBox="0 0 28 20" fill="none">
             <rect x="0.5" y="0.5" width="27" height="19" rx="3" stroke="#D9C9A0" strokeWidth="1"/>

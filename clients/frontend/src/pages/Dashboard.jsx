@@ -5,6 +5,7 @@ import Layout from '../components/Layout'
 import AccountCard from '../components/AccountCard'
 import { formatMoney, formatDate } from '../lib/format'
 import SpendingChart from '../components/SpendingChart'
+import JointInvitations from '../components/JointInvitations'
 import { useAuth } from '../context/AuthContext'
 
 const quickActions = [
@@ -77,6 +78,8 @@ const activeAccounts = accounts.filter((a) => a.status === 'active')
 
   return (
     <Layout>
+      <JointInvitations onResolved={loadAccounts} />
+
       {/* Hero balance */}
       <div className="mb-6">
         <div className="flex justify-between items-start">

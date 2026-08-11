@@ -29,6 +29,12 @@ class AccountType(str, enum.Enum):
     savings = "savings"
 
 
+class JointOwnerStatus(str, enum.Enum):
+    pending = "pending"
+    accepted = "accepted"
+    declined = "declined"
+
+
 class AccountStatus(str, enum.Enum):
     active = "active"
     frozen = "frozen"
@@ -361,3 +367,16 @@ class FraudFlag(Base):
     reviewed_by = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AccountOwner(Base):
+    __tablename__ = "account_owners"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    account_id = Column(UUID(as_uuid=False), ForeignKey("accounts.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    invited_by = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
+    is_primary = Column(Boolean, default=False, nullable=False)
+    status = Column(Enum(JointOwnerStatus), default=JointOwnerStatus.pending, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    responded_at = Column(DateTime, nullable=True)

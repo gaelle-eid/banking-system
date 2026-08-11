@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
+from app.core.account_access import get_accessible_account_ids, user_can_access_account
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.email import send_transaction_email
@@ -22,7 +22,7 @@ async def _get_owned_account(db: AsyncSession, account_id: str, user: User, allo
     account = result.scalar_one_or_none()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
-    if account.owner_id != user.id and user.role.value == "client":
+    if user.role.value == "client" and not await user_can_access_account(db, user.id, account_id):
         raise HTTPException(status_code=403, detail="Not your account")
     if account.status.value == "closed" and not allow_closed:
         raise HTTPException(status_code=400, detail="This account is closed")
@@ -218,8 +218,7 @@ async def get_recent_recipients(
     db: AsyncSession = Depends(get_db),
 ):
     """Returns people this client has sent money to before, most recent first."""
-    my_accounts_result = await db.execute(select(Account).where(Account.owner_id == current_user.id))
-    my_account_ids = [a.id for a in my_accounts_result.scalars().all()]
+    my_account_ids = await get_accessible_account_ids(db, current_user.id)
 
     if not my_account_ids:
         return []
@@ -249,7 +248,7 @@ async def get_recent_recipients(
 
         account_result = await db.execute(select(Account).where(Account.id == credit.account_id))
         recipient_account = account_result.scalar_one_or_none()
-        if not recipient_account or recipient_account.owner_id == current_user.id:
+        if not recipient_account or recipient_account.id in my_account_ids:
             continue
 
         user_result = await db.execute(select(User).where(User.id == recipient_account.owner_id))
