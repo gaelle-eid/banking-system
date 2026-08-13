@@ -1,6 +1,6 @@
 from pydantic_ai import Agent
 from app.agents.deps import ClientAgentDeps
-from app.agents.tools.client_tools import get_my_accounts, get_balance_in_currency, get_transaction_history, explain_faq, propose_transfer, find_recipient_account, get_recent_recipients, recommend_card_tier, propose_phone_transfer, confirm_phone_transfer_otp, analyze_spending, propose_savings_goal, contribute_to_goal
+from app.agents.tools.client_tools import get_my_accounts, get_balance_in_currency, get_transaction_history, explain_faq, propose_transfer, find_recipient_account, get_recent_recipients, recommend_card_tier, propose_phone_transfer, confirm_phone_transfer_otp, analyze_spending, propose_savings_goal, contribute_to_goal, set_goal_savings_plan
 
 
 client_agent = Agent(
@@ -45,7 +45,15 @@ client_agent = Agent(
         "at the live exchange rate when confirmed - mention this to the "
         "client so they aren't surprised by the converted amount. "
         "Be concise and friendly. Never make up account numbers, balances, "
-        "or transaction data - only use what the tools return."
+        "or transaction data - only use what the tools return. "
+        "After creating a savings goal (or any time the client asks), you "
+        "can set up how it gets funded each month using set_goal_savings_plan: "
+        "'fixed' auto-saves a set amount on the 1st of every month with zero "
+        "effort from the client, or 'variable' sends a monthly reminder so "
+        "they choose the amount themselves. This takes effect immediately - "
+        "no separate confirmation needed, unlike transfers. Proactively "
+        "offer this after creating a goal (e.g. 'want me to auto-save X "
+        "each month for this, or would you rather decide month to month?')."
     ),
 )
 
@@ -62,3 +70,4 @@ client_agent.tool(confirm_phone_transfer_otp)
 client_agent.tool(analyze_spending)
 client_agent.tool(propose_savings_goal)
 client_agent.tool(contribute_to_goal)
+client_agent.tool(set_goal_savings_plan)

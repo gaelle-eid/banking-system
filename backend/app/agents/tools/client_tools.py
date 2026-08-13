@@ -677,3 +677,50 @@ async def contribute_to_goal(
         f"I've prepared a {amount} contribution to your '{goal.name}' goal from your "
         f"{source_account.nickname}. This hasn't been executed yet - please confirm using action id {action.id}."
     )
+
+
+async def set_goal_savings_plan(
+    ctx: RunContext[ClientAgentDeps],
+    goal_name: str,
+    mode: str,
+    fixed_monthly_amount: float | None = None,
+) -> str:
+    """Set up or change how a savings goal gets funded each month.
+    mode should be 'fixed' (auto-save a set amount on the 1st of each
+    month, no client action needed) or 'variable' (the client gets a
+    reminder each month and contributes manually). If mode is 'fixed',
+    fixed_monthly_amount is required. This takes effect immediately -
+    it's a settings change, not a money transfer, so it doesn't need
+    separate confirmation."""
+    from app.models.models import SavingsGoal, ContributionMode
+    from decimal import Decimal
+
+    if mode not in ("fixed", "variable"):
+        return "The savings plan mode should be either 'fixed' (auto-save a set amount monthly) or 'variable' (manual, with a monthly reminder)."
+    if mode == "fixed" and not fixed_monthly_amount:
+        return "For a fixed monthly plan, I need the amount to auto-save each month."
+
+    result = await ctx.deps.db.execute(
+        select(SavingsGoal).where(
+            SavingsGoal.client_id == ctx.deps.user_id,
+            SavingsGoal.name.ilike(goal_name),
+            SavingsGoal.active == True,
+        )
+    )
+    goal = result.scalar_one_or_none()
+    if not goal:
+        return f"I couldn't find an active goal named '{goal_name}'."
+
+    goal.contribution_mode = ContributionMode.fixed if mode == "fixed" else ContributionMode.variable
+    goal.fixed_monthly_amount = Decimal(str(fixed_monthly_amount)) if mode == "fixed" else None
+    await ctx.deps.db.flush()
+
+    if mode == "fixed":
+        return (
+            f"Done - '{goal.name}' will now auto-save {fixed_monthly_amount} on the 1st of each month, "
+            f"moved automatically from its funding account. No action needed on your end each month."
+        )
+    return (
+        f"Done - '{goal.name}' is now on a variable plan. You'll get a reminder on the 1st of each month "
+        f"and can tell me how much to contribute that month."
+    )
