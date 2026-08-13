@@ -8,8 +8,12 @@ from app.core.deps import get_current_user
 from app.core.audit import log_action
 from app.core.account_access import get_accessible_accounts, user_can_access_account
 from app.core.email import send_transaction_email, send_joint_invitation_email
+from app.core.exchange_rates import get_supported_rates, convert as convert_currency
 from app.models.models import Account, AccountOwner, AccountStatus, JointOwnerStatus, User
-from app.schemas.account import AccountCreate, AccountOut, JointOwnerAdd, JointOwnerOut, JointInvitationOut
+from app.schemas.account import (
+    AccountCreate, AccountOut, JointOwnerAdd, JointOwnerOut, JointInvitationOut,
+    ExchangeRatesOut, ConversionPreviewOut,
+)
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -40,6 +44,41 @@ async def _attach_is_joint(db: AsyncSession, accounts: list[Account]) -> list[Ac
     for acc in accounts:
         acc.is_joint = acc.id in joint_ids
     return accounts
+
+
+@router.get("/exchange-rates", response_model=ExchangeRatesOut)
+async def get_exchange_rates(
+    current_user: User = Depends(get_current_user),
+):
+    """Current live exchange rates (USD-based) for all currencies this
+    app supports. Used by the frontend to show conversion previews."""
+    try:
+        rates = await get_supported_rates()
+    except Exception:
+        raise HTTPException(status_code=503, detail="Exchange rate service is temporarily unavailable")
+    return ExchangeRatesOut(base="USD", rates=rates)
+
+
+@router.get("/convert-preview", response_model=ConversionPreviewOut)
+async def get_conversion_preview(
+    amount: float,
+    from_currency: str,
+    to_currency: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Preview what an amount converts to between two currencies, without
+    executing any transfer. Used for live previews on the transfer form."""
+    from decimal import Decimal
+    try:
+        converted, rate = await convert_currency(Decimal(str(amount)), from_currency, to_currency)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=503, detail="Exchange rate service is temporarily unavailable")
+    return ConversionPreviewOut(
+        from_currency=from_currency, to_currency=to_currency,
+        amount=Decimal(str(amount)), converted_amount=converted, rate=rate,
+    )
 
 
 @router.post("", response_model=AccountOut, status_code=status.HTTP_201_CREATED)

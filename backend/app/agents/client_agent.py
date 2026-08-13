@@ -1,6 +1,6 @@
 from pydantic_ai import Agent
 from app.agents.deps import ClientAgentDeps
-from app.agents.tools.client_tools import get_my_accounts, get_transaction_history, explain_faq, propose_transfer, find_recipient_account, get_recent_recipients, recommend_card_tier, propose_phone_transfer, confirm_phone_transfer_otp, analyze_spending, propose_savings_goal, contribute_to_goal
+from app.agents.tools.client_tools import get_my_accounts, get_balance_in_currency, get_transaction_history, explain_faq, propose_transfer, find_recipient_account, get_recent_recipients, recommend_card_tier, propose_phone_transfer, confirm_phone_transfer_otp, analyze_spending, propose_savings_goal, contribute_to_goal
 
 
 client_agent = Agent(
@@ -38,12 +38,19 @@ client_agent = Agent(
         "transfers) or verification id (for phone-based transfers). "
         "You can also analyze the client's spending and give concrete, "
         "actionable savings advice when asked (e.g. about saving for a goal). "
+        "Accounts can be held in different currencies (USD, EUR, GBP, LBP, "
+        "JOD). If the client asks what a balance is worth in another "
+        "currency, use get_balance_in_currency. If a transfer moves money "
+        "between accounts in different currencies, it converts automatically "
+        "at the live exchange rate when confirmed - mention this to the "
+        "client so they aren't surprised by the converted amount. "
         "Be concise and friendly. Never make up account numbers, balances, "
         "or transaction data - only use what the tools return."
     ),
 )
 
 client_agent.tool(get_my_accounts)
+client_agent.tool(get_balance_in_currency)
 client_agent.tool(get_transaction_history)
 client_agent.tool(explain_faq)
 client_agent.tool(propose_transfer)

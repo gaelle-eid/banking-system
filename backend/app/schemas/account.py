@@ -1,11 +1,11 @@
 from pydantic import BaseModel
 from decimal import Decimal
 from datetime import datetime
-from app.models.models import AccountType, AccountStatus, JointOwnerStatus
+from app.models.models import AccountType, AccountStatus, JointOwnerStatus, CurrencyCode
 
 class AccountCreate(BaseModel):
     type: AccountType
-    currency: str = "USD"
+    currency: CurrencyCode = CurrencyCode.USD
     nickname: str | None = None
 
 
@@ -54,3 +54,16 @@ class JointInvitationOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ExchangeRatesOut(BaseModel):
+    base: str = "USD"
+    rates: dict[str, Decimal]
+
+
+class ConversionPreviewOut(BaseModel):
+    from_currency: str
+    to_currency: str
+    amount: Decimal
+    converted_amount: Decimal
+    rate: Decimal

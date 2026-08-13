@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, accounts, transactions, loans, cards, statements, agent, approvals, audit, employees, reports, admin, employee_agent, registrations, knowledge, goals,fraud
-from app.core.scheduler import start_scheduler, stop_scheduler
 
+from app.core.scheduler import start_scheduler, stop_scheduler
+from app.routers import auth, accounts, transactions, loans, cards, statements, agent, approvals, audit, employees, reports, admin, employee_agent, registrations, knowledge, goals,fraud, funding_sources
 app = FastAPI(title="Banking System API")
 
 app.add_middleware(
@@ -30,7 +30,7 @@ app.include_router(registrations.router)
 app.include_router(knowledge.router)
 app.include_router(goals.router)
 app.include_router(fraud.router)
-
+app.include_router(funding_sources.router)
 
 @app.on_event("startup")
 async def on_startup():

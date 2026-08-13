@@ -4,12 +4,14 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.core.account_access import get_accessible_account_ids, user_can_access_account
+
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.email import send_transaction_email
 from app.core.limits import check_transaction_limits
 from app.core.fraud_detection import check_transaction_for_fraud
+from app.core.account_access import get_accessible_account_ids, user_can_access_account
+from app.core.exchange_rates import convert as convert_currency
 from app.models.models import Account, Transaction, TransactionType, TransactionStatus, User, TransferVerification
 from app.schemas.transaction import DepositRequest, WithdrawalRequest, TransferRequest, TransactionOut, PhoneTransferInitiateRequest, PhoneTransferConfirmRequest
 from app.core.email import send_transfer_otp_email
@@ -49,6 +51,7 @@ async def deposit(
         amount=payload.amount,
         status=TransactionStatus.completed,
         initiated_by=current_user.id,
+        source=payload.source,
     )
     db.add(tx)
     await db.commit()
@@ -57,7 +60,7 @@ async def deposit(
     try:
         send_transaction_email(
             current_user.email, current_user.full_name, "deposit",
-            f"{payload.amount} {account.currency}",
+            f"{payload.amount} {account.currency} (via {payload.source})",
             account.nickname or account.type.value,
             f"{account.balance} {account.currency}",
         )
@@ -146,8 +149,20 @@ async def transfer(
 
     group_id = str(uuid.uuid4())
 
+    exchange_rate = None
+    credit_amount = payload.amount
+    if from_account.currency != to_account.currency:
+        try:
+            credit_amount, exchange_rate = await convert_currency(
+                payload.amount, from_account.currency, to_account.currency
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception:
+            raise HTTPException(status_code=503, detail="Exchange rate service is temporarily unavailable, please try again")
+
     from_account.balance -= payload.amount
-    to_account.balance += payload.amount
+    to_account.balance += credit_amount
 
     debit_tx = Transaction(
         account_id=from_account.id,
@@ -156,14 +171,16 @@ async def transfer(
         transfer_group_id=group_id,
         status=TransactionStatus.completed,
         initiated_by=current_user.id,
+        exchange_rate=exchange_rate,
     )
     credit_tx = Transaction(
         account_id=to_account.id,
         type=TransactionType.transfer_credit,
-        amount=payload.amount,
+        amount=credit_amount,
         transfer_group_id=group_id,
         status=TransactionStatus.completed,
         initiated_by=current_user.id,
+        exchange_rate=exchange_rate,
     )
     db.add_all([debit_tx, credit_tx])
     await db.commit()
@@ -183,7 +200,7 @@ async def transfer(
         if to_owner:
             send_transaction_email(
                 to_owner.email, to_owner.full_name, "transfer_credit",
-                f"{payload.amount} {to_account.currency}",
+                f"{credit_amount} {to_account.currency}",
                 to_account.nickname or to_account.type.value,
                 f"{to_account.balance} {to_account.currency}",
             )
@@ -344,18 +361,33 @@ async def confirm_phone_transfer(
         raise HTTPException(status_code=400, detail="Insufficient funds")
 
     group_id = str(uuid.uuid4())
+
+    exchange_rate = None
+    credit_amount = verification.amount
+    if from_account.currency != to_account.currency:
+        try:
+            credit_amount, exchange_rate = await convert_currency(
+                verification.amount, from_account.currency, to_account.currency
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception:
+            raise HTTPException(status_code=503, detail="Exchange rate service is temporarily unavailable, please try again")
+
     from_account.balance -= verification.amount
-    to_account.balance += verification.amount
+    to_account.balance += credit_amount
 
     debit_tx = Transaction(
         account_id=from_account.id, type=TransactionType.transfer_debit,
         amount=verification.amount, transfer_group_id=group_id,
         status=TransactionStatus.completed, initiated_by=current_user.id,
+        exchange_rate=exchange_rate,
     )
     credit_tx = Transaction(
         account_id=to_account.id, type=TransactionType.transfer_credit,
-        amount=verification.amount, transfer_group_id=group_id,
+        amount=credit_amount, transfer_group_id=group_id,
         status=TransactionStatus.completed, initiated_by=current_user.id,
+        exchange_rate=exchange_rate,
     )
     db.add_all([debit_tx, credit_tx])
 

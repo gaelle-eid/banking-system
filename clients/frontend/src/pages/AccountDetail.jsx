@@ -2,22 +2,27 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import Layout from '../components/Layout'
-import PhoneTransferForm from '../components/PhoneTransferForm'
-import JointOwners from '../components/JointOwners'
 import { formatMoney, formatDate } from '../lib/format'
 import { useToast } from '../context/ToastContext'
+import PhoneTransferForm from '../components/PhoneTransferForm'
+import JointOwners from '../components/JointOwners'
+import { useAuth } from '../context/AuthContext'
 export default function AccountDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [account, setAccount] = useState(null)
   const [transactions, setTransactions] = useState([])
   const [accounts, setAccounts] = useState([])
   const [loading, setLoading] = useState(true)
 
   const [depositAmount, setDepositAmount] = useState('')
+  const [depositSource, setDepositSource] = useState('BLOM Bank ••••4521 (External Bank Account)')
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [transferAmount, setTransferAmount] = useState('')
   const [transferTo, setTransferTo] = useState('')
+  const [conversionPreview, setConversionPreview] = useState(null)
+  const [conversionLoading, setConversionLoading] = useState(false)
   const [actionError, setActionError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
@@ -39,12 +44,38 @@ export default function AccountDetail() {
     loadData()
   }, [id])
 
+  useEffect(() => {
+    const toAccount = accounts.find((a) => a.id === transferTo)
+    const amountNum = parseFloat(transferAmount)
+
+    if (!toAccount || !account || toAccount.currency === account.currency || !amountNum || amountNum <= 0) {
+      setConversionPreview(null)
+      return
+    }
+
+    setConversionLoading(true)
+    const timeoutId = setTimeout(async () => {
+      try {
+        const res = await api.get('/accounts/convert-preview', {
+          params: { amount: amountNum, from_currency: account.currency, to_currency: toAccount.currency },
+        })
+        setConversionPreview(res.data)
+      } catch {
+        setConversionPreview(null)
+      } finally {
+        setConversionLoading(false)
+      }
+    }, 400)
+
+    return () => clearTimeout(timeoutId)
+  }, [transferTo, transferAmount, accounts, account])
+
   async function handleDeposit(e) {
     e.preventDefault()
     setActionError('')
     setActionLoading(true)
     try {
-      await api.post('/transactions/deposit', { account_id: id, amount: parseFloat(depositAmount) })
+      await api.post('/transactions/deposit', { account_id: id, amount: parseFloat(depositAmount), source: depositSource })
       setDepositAmount('')
       await loadData()
       showToast('Deposit successful')
@@ -87,6 +118,7 @@ export default function AccountDetail() {
       })
       setTransferAmount('')
       setTransferTo('')
+      setConversionPreview(null)
       await loadData()
       showToast('Transfer successful')
     } catch (err) {
@@ -145,16 +177,7 @@ export default function AccountDetail() {
         </div>
       </div>
 
-      {account.status === 'active' && (
-        <button
-          onClick={() => setShowCloseConfirm(true)}
-          className="text-sm text-crimson-600 hover:underline mb-6"
-        >
-          Close this account
-        </button>
-      )}
-
-      {account.status === 'active' && (
+      {account.status === 'active' && account.owner_id === user?.id && (
         <button
           onClick={() => setShowCloseConfirm(true)}
           className="text-sm text-crimson-600 hover:underline mb-6"
@@ -170,12 +193,6 @@ export default function AccountDetail() {
       )}
 
       <JointOwners account={account} onChange={loadData} />
-
-      {showCloseConfirm && (
-        <div className="bg-white rounded-xl border border-crimson-600/40 p-4 mb-6 max-w-sm">
-          ...
-        </div>
-      )}
 
       {showCloseConfirm && (
         <div className="bg-white rounded-xl border border-crimson-600/40 p-4 mb-6 max-w-sm">
@@ -210,6 +227,15 @@ export default function AccountDetail() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <form onSubmit={handleDeposit} className="bg-white rounded-xl p-4 border border-stone-300/40">
           <h3 className="font-medium text-sm mb-3 text-ink-950">Deposit</h3>
+          <select
+            required value={depositSource} onChange={(e) => setDepositSource(e.target.value)}
+            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm mb-2"
+          >
+            <option value="BLOM Bank ••••4521 (External Bank Account)">BLOM Bank ••••4521 (External Bank Account)</option>
+            <option value="Bank Audi ••••7790 (External Bank Account)">Bank Audi ••••7790 (External Bank Account)</option>
+            <option value="Visa Debit ••••8842 (Linked Card)">Visa Debit ••••8842 (Linked Card)</option>
+            <option value="Cash Deposit (Branch)">Cash Deposit (Branch)</option>
+          </select>
           <input
             type="number" step="0.01" min="0.01" required
             value={depositAmount}
@@ -254,6 +280,15 @@ export default function AccountDetail() {
             placeholder="Amount"
             className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm mb-2 font-mono"
           />
+          {conversionLoading && (
+            <p className="text-xs text-stone-500 mb-2">Checking exchange rate...</p>
+          )}
+          {!conversionLoading && conversionPreview && (
+            <p className="text-xs text-stone-500 mb-2">
+              ≈ {conversionPreview.converted_amount} {conversionPreview.to_currency} at today's rate
+              (1 {conversionPreview.from_currency} = {conversionPreview.rate} {conversionPreview.to_currency})
+            </p>
+          )}
           <button disabled={actionLoading} className="w-full bg-crimson-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-crimson-700 transition disabled:opacity-50">
             Transfer
           </button>
@@ -278,7 +313,9 @@ export default function AccountDetail() {
               <div key={tx.id} className="flex justify-between items-center px-4 py-3">
                 <div>
                   <p className="text-sm font-medium capitalize text-ink-950">{tx.type.replace('_', ' ')}</p>
-                  <p className="text-xs text-stone-500">{formatDate(tx.created_at)}</p>
+                  <p className="text-xs text-stone-500">
+                    {tx.type === 'deposit' && tx.source ? `via ${tx.source} · ` : ''}{formatDate(tx.created_at)}
+                  </p>
                 </div>
                 <p className={`font-mono text-sm font-medium ${isCredit ? 'text-ink-950' : 'text-crimson-600'}`}>
                   {isCredit ? '+' : '-'}{formatMoney(tx.amount, account.currency)}

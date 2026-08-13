@@ -29,11 +29,23 @@ class AccountType(str, enum.Enum):
     savings = "savings"
 
 
+class CurrencyCode(str, enum.Enum):
+    USD = "USD"
+    EUR = "EUR"
+    GBP = "GBP"
+    LBP = "LBP"
+    JOD = "JOD"
+
+
 class JointOwnerStatus(str, enum.Enum):
     pending = "pending"
     accepted = "accepted"
     declined = "declined"
 
+class FundingSourceStatus(str, enum.Enum):
+    pending_verification = "pending_verification"
+    verified = "verified"
+    failed = "failed"
 
 class AccountStatus(str, enum.Enum):
     active = "active"
@@ -173,8 +185,9 @@ class Transaction(Base):
     transfer_group_id = Column(UUID(as_uuid=False), nullable=True, index=True)  # links debit+credit rows
     status = Column(Enum(TransactionStatus), default=TransactionStatus.pending)
     initiated_by = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    exchange_rate = Column(Numeric(18, 8), nullable=True)  # set only on cross-currency transfer legs
+    source = Column(String, nullable=True)  # funding source label, mainly for deposits (e.g. "BLOM Bank ••••4521")
     created_at = Column(DateTime, default=datetime.utcnow)
-
 
 # ---------- Extended banking ----------
 
@@ -380,3 +393,20 @@ class AccountOwner(Base):
     status = Column(Enum(JointOwnerStatus), default=JointOwnerStatus.pending, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     responded_at = Column(DateTime, nullable=True)
+
+class FundingSource(Base):
+    """An external bank account or card a client has linked as a deposit
+    source. Must go through micro-deposit verification before it can
+    actually be used to deposit money."""
+    __tablename__ = "funding_sources"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    bank_name = Column(String, nullable=False)
+    masked_account_number = Column(String, nullable=False)  # e.g. "••••4521"
+    status = Column(Enum(FundingSourceStatus), default=FundingSourceStatus.pending_verification, nullable=False)
+    micro_deposit_1 = Column(Numeric(4, 2), nullable=True)
+    micro_deposit_2 = Column(Numeric(4, 2), nullable=True)
+    verification_attempts = Column(Numeric, default=0, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    verified_at = Column(DateTime, nullable=True)

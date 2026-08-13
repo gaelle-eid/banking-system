@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from pydantic_ai import RunContext
 from sqlalchemy import select
 import re
@@ -28,6 +29,45 @@ async def get_my_accounts(ctx: RunContext[ClientAgentDeps]) -> str:
             f"{acc.balance} {acc.currency}"
         )
     return "\n".join(lines)
+
+
+async def get_balance_in_currency(
+    ctx: RunContext[ClientAgentDeps],
+    target_currency: str,
+    account_nickname: str | None = None,
+    account_type: str | None = None,
+) -> str:
+    """Show what one of the client's account balances is worth in a
+    different currency (e.g. 'what's my checking balance in EUR?').
+    target_currency should be a 3-letter code like USD, EUR, GBP, LBP, JOD.
+    If account_nickname/account_type aren't given and the client has only
+    one account, that one is used automatically."""
+    from app.core.exchange_rates import convert as convert_currency
+
+    if account_nickname or account_type:
+        account, err = await _resolve_own_account(ctx, account_type, account_nickname)
+        if err:
+            return err
+    else:
+        accounts = await get_accessible_accounts(ctx.deps.db, ctx.deps.user_id)
+        if not accounts:
+            return "You don't have any accounts yet."
+        if len(accounts) > 1:
+            options = ", ".join(a.nickname or a.type.value for a in accounts)
+            return f"You have multiple accounts: {options}. Which one do you mean?"
+        account = accounts[0]
+
+    try:
+        converted, rate = await convert_currency(account.balance, account.currency, target_currency.upper())
+    except ValueError:
+        return f"I don't have exchange rate data for {target_currency.upper()}. Supported currencies: USD, EUR, GBP, LBP, JOD."
+    except Exception:
+        return "The exchange rate service is temporarily unavailable - please try again in a moment."
+
+    return (
+        f"Your {account.nickname} balance of {account.balance} {account.currency} is "
+        f"approximately {converted} {target_currency.upper()} (rate: 1 {account.currency} = {rate} {target_currency.upper()})."
+    )
 
 
 async def get_transaction_history(ctx: RunContext[ClientAgentDeps], account_nickname: str, limit: int = 10) -> str:
@@ -198,11 +238,23 @@ async def propose_transfer(
     ctx.deps.db.add(action)
     await ctx.deps.db.flush()
 
+    conversion_note = ""
+    if from_account.currency != to_account.currency:
+        try:
+            from app.core.exchange_rates import convert as convert_currency
+            converted, rate = await convert_currency(Decimal(str(amount)), from_account.currency, to_account.currency)
+            conversion_note = (
+                f" This will be converted at today's rate (1 {from_account.currency} = {rate} "
+                f"{to_account.currency}), crediting approximately {converted} {to_account.currency}."
+            )
+        except Exception:
+            conversion_note = f" Note: this converts from {from_account.currency} to {to_account.currency} at the live rate when confirmed."
+
     return (
-        f"I've prepared a transfer of {amount} from your {from_account.nickname} "
+        f"I've prepared a transfer of {amount} {from_account.currency} from your {from_account.nickname} "
         f"({mask_account_number(from_account.account_number)}) to "
         f"{'your' if to_owner_name == 'you' else to_owner_name + chr(39) + 's'} {to_account.nickname} "
-        f"({mask_account_number(to_account.account_number)}). "
+        f"({mask_account_number(to_account.account_number)}).{conversion_note} "
         f"This hasn't been executed yet - please confirm it using action id {action.id}."
     )
 
@@ -421,23 +473,39 @@ async def confirm_phone_transfer_otp(
     if from_account.balance < verification.amount:
         return "Insufficient funds to complete this transfer now."
 
+    from app.core.exchange_rates import convert as convert_currency
+
+    exchange_rate = None
+    credit_amount = verification.amount
+    if from_account.currency != to_account.currency:
+        try:
+            credit_amount, exchange_rate = await convert_currency(
+                verification.amount, from_account.currency, to_account.currency
+            )
+        except Exception:
+            return "The exchange rate service is temporarily unavailable - please try confirming again in a moment."
+
     group_id = str(uuid_module.uuid4())
     from_account.balance -= verification.amount
-    to_account.balance += verification.amount
+    to_account.balance += credit_amount
 
     ctx.deps.db.add(Transaction(
         account_id=from_account.id, type=TransactionType.transfer_debit,
         amount=verification.amount, transfer_group_id=group_id,
         status=TransactionStatus.completed, initiated_by=ctx.deps.user_id,
+        exchange_rate=exchange_rate,
     ))
     ctx.deps.db.add(Transaction(
         account_id=to_account.id, type=TransactionType.transfer_credit,
-        amount=verification.amount, transfer_group_id=group_id,
+        amount=credit_amount, transfer_group_id=group_id,
         status=TransactionStatus.completed, initiated_by=ctx.deps.user_id,
+        exchange_rate=exchange_rate,
     ))
     verification.verified = True
     await ctx.deps.db.flush()
 
+    if exchange_rate:
+        return f"Transfer completed successfully - {verification.amount} {from_account.currency} converted to {credit_amount} {to_account.currency}."
     return f"Transfer of {verification.amount} completed successfully."
 
 

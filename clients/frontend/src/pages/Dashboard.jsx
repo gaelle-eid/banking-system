@@ -21,6 +21,7 @@ export default function Dashboard() {
 const [creating, setCreating] = useState(false)
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [newAccountType, setNewAccountType] = useState('checking')
+  const [newAccountCurrency, setNewAccountCurrency] = useState('USD')
   const [newAccountNickname, setNewAccountNickname] = useState('')
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -51,7 +52,7 @@ async function handleCreateAccount(e) {
     try {
       await api.post('/accounts', {
         type: newAccountType,
-        currency: 'USD',
+        currency: newAccountCurrency,
         nickname: newAccountNickname.trim() || undefined,
       })
       setNewAccountNickname('')
@@ -146,6 +147,20 @@ const activeAccounts = accounts.filter((a) => a.status === 'active')
               >
                 <option value="checking">Checking</option>
                 <option value="savings">Savings</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-stone-500 mb-1">Currency</label>
+              <select
+                value={newAccountCurrency}
+                onChange={(e) => setNewAccountCurrency(e.target.value)}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              >
+                <option value="USD">USD - US Dollar</option>
+                <option value="EUR">EUR - Euro</option>
+                <option value="GBP">GBP - British Pound</option>
+                <option value="LBP">LBP - Lebanese Pound</option>
+                <option value="JOD">JOD - Jordanian Dinar</option>
               </select>
             </div>
             <div>

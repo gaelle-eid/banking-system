@@ -7,6 +7,7 @@ from app.models.models import TransactionType, TransactionStatus
 class DepositRequest(BaseModel):
     account_id: str
     amount: Decimal = Field(gt=0)
+    funding_source_id: str
 
 
 class WithdrawalRequest(BaseModel):
@@ -27,6 +28,8 @@ class TransactionOut(BaseModel):
     amount: Decimal
     transfer_group_id: str | None
     status: TransactionStatus
+    exchange_rate: Decimal | None = None
+    source: str | None = None
     created_at: datetime
 
     class Config:

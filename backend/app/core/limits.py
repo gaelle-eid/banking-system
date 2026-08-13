@@ -9,6 +9,8 @@ from app.models.models import Transaction, TransactionType, TransactionStatus
 MAX_TRANSACTION_AMOUNT = Decimal("10000")
 MAX_DAILY_TOTAL = Decimal("20000")
 MIN_BALANCE_AFTER_WITHDRAWAL = Decimal("10")
+NEW_FUNDING_SOURCE_DEPOSIT_CAP = Decimal("500")
+NEW_FUNDING_SOURCE_WINDOW_HOURS = 24
 
 
 async def get_todays_moved_total(db: AsyncSession, account_id: str) -> Decimal:
@@ -48,3 +50,19 @@ async def check_transaction_limits(db: AsyncSession, account, amount: Decimal, i
                 f"This would leave your account below the required minimum balance of {MIN_BALANCE_AFTER_WITHDRAWAL}. "
                 f"Withdraw the full balance ({account.balance}) instead if you're trying to empty the account."
             )
+
+
+def check_deposit_source_limit(funding_source, amount: Decimal):
+    """Newly-verified funding sources are capped at a lower deposit amount
+    for the first 24 hours, matching common real-world fraud prevention
+    for freshly-linked accounts."""
+    if not funding_source.verified_at:
+        return  # shouldn't happen (deposits require verified sources), but don't crash if it does
+
+    age = datetime.utcnow() - funding_source.verified_at
+    if age < timedelta(hours=NEW_FUNDING_SOURCE_WINDOW_HOURS) and amount > NEW_FUNDING_SOURCE_DEPOSIT_CAP:
+        raise ValueError(
+            f"This funding source was linked recently, so deposits are capped at "
+            f"{NEW_FUNDING_SOURCE_DEPOSIT_CAP} for the first {NEW_FUNDING_SOURCE_WINDOW_HOURS} hours. "
+            f"This limit will lift automatically."
+        )
