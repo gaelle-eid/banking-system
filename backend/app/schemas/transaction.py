@@ -13,6 +13,8 @@ class DepositRequest(BaseModel):
 class WithdrawalRequest(BaseModel):
     account_id: str
     amount: Decimal = Field(gt=0)
+    method: str  # "atm" / "branch_teller" / "cash_back"
+    card_id: str | None = None  # required when method is "atm"
 
 
 class TransferRequest(BaseModel):
@@ -30,6 +32,7 @@ class TransactionOut(BaseModel):
     status: TransactionStatus
     exchange_rate: Decimal | None = None
     source: str | None = None
+    method: str | None = None
     created_at: datetime
 
     class Config:

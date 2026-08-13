@@ -15,6 +15,7 @@ export default function Cards() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [cancellingId, setCancellingId] = useState(null)
+  const [activatingId, setActivatingId] = useState(null)
   const { showToast } = useToast()
 
   async function loadData() {
@@ -57,6 +58,19 @@ export default function Cards() {
       showToast(err.response?.data?.detail || 'Could not cancel card', 'error')
     } finally {
       setCancellingId(null)
+    }
+  }
+
+  async function handleActivate(cardId) {
+    setActivatingId(cardId)
+    try {
+      await api.patch(`/cards/${cardId}/activate`)
+      showToast('Card activated')
+      await loadData()
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Could not activate card', 'error')
+    } finally {
+      setActivatingId(null)
     }
   }
 
@@ -131,7 +145,19 @@ export default function Cards() {
                 </div>
                 <p className="font-mono text-lg tracking-[0.2em] mb-1">{card.masked_number}</p>
                 <p className="text-xs text-stone-300 mb-3">Expires {formatDate(card.expiry_date)}</p>
-                {card.status === 'active' && (
+                {card.status === 'active' && !card.activated_at && (
+                  <div className="mb-1">
+                    <p className="text-[11px] text-stone-300 mb-1.5">Approved - not yet activated</p>
+                    <button
+                      onClick={() => handleActivate(card.id)}
+                      disabled={activatingId === card.id}
+                      className="text-xs bg-white text-ink-950 px-2.5 py-1 rounded-md font-medium hover:bg-stone-100 transition disabled:opacity-50"
+                    >
+                      {activatingId === card.id ? 'Activating...' : 'Activate this card'}
+                    </button>
+                  </div>
+                )}
+                {card.status === 'active' && card.activated_at && (
                   <button
                     onClick={() => handleCancel(card.id)}
                     disabled={cancellingId === card.id}

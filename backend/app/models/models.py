@@ -187,6 +187,7 @@ class Transaction(Base):
     initiated_by = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
     exchange_rate = Column(Numeric(18, 8), nullable=True)  # set only on cross-currency transfer legs
     source = Column(String, nullable=True)  # funding source label, mainly for deposits (e.g. "BLOM Bank ••••4521")
+    method = Column(String, nullable=True)  # withdrawal method: "atm" / "branch_teller" / "cash_back"
     created_at = Column(DateTime, default=datetime.utcnow)
 
 # ---------- Extended banking ----------
@@ -214,6 +215,7 @@ class Card(Base):
     tier = Column(Enum(CardTier), default=CardTier.standard)
     status = Column(Enum(CardStatus), default=CardStatus.active)
     expiry_date = Column(DateTime, nullable=False)
+    activated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 class Statement(Base):
     __tablename__ = "statements"

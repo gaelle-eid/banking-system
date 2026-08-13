@@ -20,6 +20,10 @@ export default function AccountDetail() {
   const [fundingSources, setFundingSources] = useState([])
   const [depositSourceId, setDepositSourceId] = useState('')
   const [withdrawAmount, setWithdrawAmount] = useState('')
+  const [withdrawMethod, setWithdrawMethod] = useState('atm')
+  const [debitCards, setDebitCards] = useState([])
+  const [hasUnactivatedCard, setHasUnactivatedCard] = useState(false)
+  const [withdrawCardId, setWithdrawCardId] = useState('')
   const [transferAmount, setTransferAmount] = useState('')
   const [transferTo, setTransferTo] = useState('')
   const [conversionPreview, setConversionPreview] = useState(null)
@@ -30,11 +34,12 @@ export default function AccountDetail() {
   const { showToast } = useToast()
 
   async function loadData() {
-    const [accRes, txRes, allAccRes, sourcesRes] = await Promise.all([
+    const [accRes, txRes, allAccRes, sourcesRes, cardsRes] = await Promise.all([
       api.get(`/accounts/${id}`),
       api.get(`/transactions/${id}`),
       api.get('/accounts/me'),
       api.get('/funding-sources'),
+      api.get('/cards/me'),
     ])
     setAccount(accRes.data)
     setTransactions(txRes.data)
@@ -42,6 +47,11 @@ export default function AccountDetail() {
     const verified = sourcesRes.data.filter((s) => s.status === 'verified')
     setFundingSources(verified)
     setDepositSourceId((prev) => prev || verified[0]?.id || '')
+    const accountDebitCards = cardsRes.data.filter((c) => c.account_id === id && c.type === 'debit')
+    const activeDebitCards = accountDebitCards.filter((c) => c.status === 'active' && c.activated_at)
+    setHasUnactivatedCard(accountDebitCards.some((c) => c.status === 'active' && !c.activated_at))
+    setDebitCards(activeDebitCards)
+    setWithdrawCardId((prev) => prev || activeDebitCards[0]?.id || '')
     setLoading(false)
   }
 
@@ -98,7 +108,12 @@ export default function AccountDetail() {
     setActionError('')
     setActionLoading(true)
     try {
-      await api.post('/transactions/withdraw', { account_id: id, amount: parseFloat(withdrawAmount) })
+      await api.post('/transactions/withdraw', {
+        account_id: id,
+        amount: parseFloat(withdrawAmount),
+        method: withdrawMethod,
+        card_id: withdrawMethod === 'atm' ? withdrawCardId : undefined,
+      })
       setWithdrawAmount('')
       await loadData()
       showToast('Withdrawal successful')
@@ -270,6 +285,37 @@ export default function AccountDetail() {
 
         <form onSubmit={handleWithdraw} className="bg-white rounded-xl p-4 border border-stone-300/40">
           <h3 className="font-medium text-sm mb-3 text-ink-950">Withdraw</h3>
+          <select
+            required value={withdrawMethod} onChange={(e) => setWithdrawMethod(e.target.value)}
+            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm mb-2"
+          >
+            <option value="atm">ATM (Debit Card)</option>
+            <option value="branch_teller">Branch Teller</option>
+            <option value="cash_back">Cash Back at Checkout</option>
+          </select>
+          {withdrawMethod === 'atm' && (
+            debitCards.length === 0 ? (
+              <div className="mb-2">
+                <p className="text-xs text-stone-500 mb-1">
+                  {hasUnactivatedCard
+                    ? 'Your debit card is approved but not yet activated.'
+                    : 'No active debit card on this account.'}
+                </p>
+                <Link to="/cards" className="text-xs text-crimson-600 hover:underline">
+                  {hasUnactivatedCard ? 'Activate your card →' : 'Request a debit card →'}
+                </Link>
+              </div>
+            ) : (
+              <select
+                required value={withdrawCardId} onChange={(e) => setWithdrawCardId(e.target.value)}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm mb-2"
+              >
+                {debitCards.map((c) => (
+                  <option key={c.id} value={c.id}>Debit Card {c.masked_number.slice(-9)}</option>
+                ))}
+              </select>
+            )
+          )}
           <input
             type="number" step="0.01" min="0.01" required
             value={withdrawAmount}
@@ -277,7 +323,10 @@ export default function AccountDetail() {
             placeholder="Amount"
             className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm mb-2 font-mono"
           />
-          <button disabled={actionLoading} className="w-full bg-crimson-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-crimson-700 transition disabled:opacity-50">
+          <button
+            disabled={actionLoading || (withdrawMethod === 'atm' && debitCards.length === 0)}
+            className="w-full bg-crimson-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-crimson-700 transition disabled:opacity-50"
+          >
             Withdraw
           </button>
         </form>
@@ -334,7 +383,7 @@ export default function AccountDetail() {
                 <div>
                   <p className="text-sm font-medium capitalize text-ink-950">{tx.type.replace('_', ' ')}</p>
                   <p className="text-xs text-stone-500">
-                    {tx.type === 'deposit' && tx.source ? `via ${tx.source} · ` : ''}{formatDate(tx.created_at)}
+                    {(tx.type === 'deposit' || tx.type === 'withdrawal') && tx.source ? `via ${tx.source} · ` : ''}{formatDate(tx.created_at)}
                   </p>
                 </div>
                 <p className={`font-mono text-sm font-medium ${isCredit ? 'text-ink-950' : 'text-crimson-600'}`}>

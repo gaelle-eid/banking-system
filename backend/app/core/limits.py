@@ -11,6 +11,16 @@ MAX_DAILY_TOTAL = Decimal("20000")
 MIN_BALANCE_AFTER_WITHDRAWAL = Decimal("10")
 NEW_FUNDING_SOURCE_DEPOSIT_CAP = Decimal("500")
 NEW_FUNDING_SOURCE_WINDOW_HOURS = 24
+MAX_CASH_BACK_PER_TRANSACTION = Decimal("100")
+
+# ATM daily cash limits vary by card tier, matching how real banks tie
+# withdrawal limits to account/card tier.
+ATM_DAILY_LIMITS_BY_TIER = {
+    "standard": Decimal("500"),
+    "cashback": Decimal("1000"),
+    "travel": Decimal("1000"),
+    "premium": Decimal("2000"),
+}
 
 
 async def get_todays_moved_total(db: AsyncSession, account_id: str) -> Decimal:
@@ -65,4 +75,31 @@ def check_deposit_source_limit(funding_source, amount: Decimal):
             f"This funding source was linked recently, so deposits are capped at "
             f"{NEW_FUNDING_SOURCE_DEPOSIT_CAP} for the first {NEW_FUNDING_SOURCE_WINDOW_HOURS} hours. "
             f"This limit will lift automatically."
+        )
+
+
+async def check_atm_withdrawal_limit(db: AsyncSession, account_id: str, amount: Decimal, card_tier: str = "standard"):
+    """ATM cash withdrawals have their own, lower daily cap - on top of the
+    general daily movement limit - matching real-world ATM cash limits.
+    The cap itself varies by card tier."""
+    daily_cap = ATM_DAILY_LIMITS_BY_TIER.get(card_tier, ATM_DAILY_LIMITS_BY_TIER["standard"])
+    start_of_day = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    result = await db.execute(
+        select(func.coalesce(func.sum(Transaction.amount), 0)).where(
+            Transaction.account_id == account_id,
+            Transaction.type == TransactionType.withdrawal,
+            Transaction.method == "atm",
+            Transaction.status == TransactionStatus.completed,
+            Transaction.created_at >= start_of_day,
+        )
+    )
+    todays_atm_total = Decimal(result.scalar() or 0)
+
+    if todays_atm_total + amount > daily_cap:
+        remaining = daily_cap - todays_atm_total
+        raise ValueError(
+            f"This would exceed your card's daily ATM withdrawal limit of {daily_cap}. "
+            f"You have {max(remaining, Decimal(0))} remaining today. "
+            f"For larger amounts, try a branch teller withdrawal instead."
         )

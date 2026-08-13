@@ -8,11 +8,11 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.email import send_transaction_email
-from app.core.limits import check_transaction_limits, check_deposit_source_limit
+from app.core.limits import check_transaction_limits, check_deposit_source_limit, check_atm_withdrawal_limit, MAX_CASH_BACK_PER_TRANSACTION
 from app.core.fraud_detection import check_transaction_for_fraud
 from app.core.account_access import get_accessible_account_ids, user_can_access_account
 from app.core.exchange_rates import convert as convert_currency
-from app.models.models import Account, Transaction, TransactionType, TransactionStatus, User, TransferVerification, FundingSource, FundingSourceStatus
+from app.models.models import Account, Transaction, TransactionType, TransactionStatus, User, TransferVerification, FundingSource, FundingSourceStatus, Card, CardType, CardStatus
 from app.schemas.transaction import DepositRequest, WithdrawalRequest, TransferRequest, TransactionOut, PhoneTransferInitiateRequest, PhoneTransferConfirmRequest
 from app.core.email import send_transfer_otp_email
 
@@ -97,8 +97,35 @@ async def withdraw(
     if account.balance < payload.amount:
         raise HTTPException(status_code=400, detail="Insufficient funds")
 
+    if payload.method not in ("atm", "branch_teller", "cash_back"):
+        raise HTTPException(status_code=400, detail="Invalid withdrawal method")
+
+    method_label = None
+    if payload.method == "atm":
+        if not payload.card_id:
+            raise HTTPException(status_code=400, detail="Select a debit card for ATM withdrawal")
+        card_result = await db.execute(select(Card).where(Card.id == payload.card_id))
+        card = card_result.scalar_one_or_none()
+        if not card or card.account_id != account.id:
+            raise HTTPException(status_code=404, detail="Card not found on this account")
+        if card.type != CardType.debit:
+            raise HTTPException(status_code=400, detail="ATM withdrawals require a debit card")
+        if card.status != CardStatus.active:
+            raise HTTPException(status_code=400, detail=f"This card is {card.status.value}, not active - ATM withdrawal isn't available")
+        if not card.activated_at:
+            raise HTTPException(status_code=400, detail="Please activate this card before using it - go to Cards to activate it.")
+        method_label = f"ATM - Debit Card {card.masked_number[-9:]}"
+    elif payload.method == "branch_teller":
+        method_label = "Branch Teller Withdrawal"
+    elif payload.method == "cash_back":
+        if payload.amount > MAX_CASH_BACK_PER_TRANSACTION:
+            raise HTTPException(status_code=400, detail=f"Cash back is limited to {MAX_CASH_BACK_PER_TRANSACTION} per transaction")
+        method_label = "Cash Back at Checkout"
+
     try:
         await check_transaction_limits(db, account, payload.amount, is_outgoing=True)
+        if payload.method == "atm":
+            await check_atm_withdrawal_limit(db, account.id, payload.amount, card.tier.value)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -109,6 +136,8 @@ async def withdraw(
         amount=payload.amount,
         status=TransactionStatus.completed,
         initiated_by=current_user.id,
+        method=payload.method,
+        source=method_label,
     )
     db.add(tx)
     await db.commit()
@@ -117,7 +146,7 @@ async def withdraw(
     try:
         send_transaction_email(
             current_user.email, current_user.full_name, "withdrawal",
-            f"{payload.amount} {account.currency}",
+            f"{payload.amount} {account.currency} ({method_label})",
             account.nickname or account.type.value,
             f"{account.balance} {account.currency}",
         )

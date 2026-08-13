@@ -17,6 +17,7 @@ class CardOut(BaseModel):
     tier: CardTier
     status: CardStatus
     expiry_date: datetime
+    activated_at: datetime | None
     created_at: datetime
 
     class Config:
