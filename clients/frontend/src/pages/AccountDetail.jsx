@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import api from '../lib/api'
 import Layout from '../components/Layout'
 import { formatMoney, formatDate } from '../lib/format'
@@ -17,7 +17,8 @@ export default function AccountDetail() {
   const [loading, setLoading] = useState(true)
 
   const [depositAmount, setDepositAmount] = useState('')
-  const [depositSource, setDepositSource] = useState('BLOM Bank ••••4521 (External Bank Account)')
+  const [fundingSources, setFundingSources] = useState([])
+  const [depositSourceId, setDepositSourceId] = useState('')
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [transferAmount, setTransferAmount] = useState('')
   const [transferTo, setTransferTo] = useState('')
@@ -29,14 +30,18 @@ export default function AccountDetail() {
   const { showToast } = useToast()
 
   async function loadData() {
-    const [accRes, txRes, allAccRes] = await Promise.all([
+    const [accRes, txRes, allAccRes, sourcesRes] = await Promise.all([
       api.get(`/accounts/${id}`),
       api.get(`/transactions/${id}`),
       api.get('/accounts/me'),
+      api.get('/funding-sources'),
     ])
     setAccount(accRes.data)
     setTransactions(txRes.data)
     setAccounts(allAccRes.data.filter((a) => a.id !== id))
+    const verified = sourcesRes.data.filter((s) => s.status === 'verified')
+    setFundingSources(verified)
+    setDepositSourceId((prev) => prev || verified[0]?.id || '')
     setLoading(false)
   }
 
@@ -75,7 +80,7 @@ export default function AccountDetail() {
     setActionError('')
     setActionLoading(true)
     try {
-      await api.post('/transactions/deposit', { account_id: id, amount: parseFloat(depositAmount), source: depositSource })
+      await api.post('/transactions/deposit', { account_id: id, amount: parseFloat(depositAmount), funding_source_id: depositSourceId })
       setDepositAmount('')
       await loadData()
       showToast('Deposit successful')
@@ -227,25 +232,40 @@ export default function AccountDetail() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <form onSubmit={handleDeposit} className="bg-white rounded-xl p-4 border border-stone-300/40">
           <h3 className="font-medium text-sm mb-3 text-ink-950">Deposit</h3>
-          <select
-            required value={depositSource} onChange={(e) => setDepositSource(e.target.value)}
-            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm mb-2"
-          >
-            <option value="BLOM Bank ••••4521 (External Bank Account)">BLOM Bank ••••4521 (External Bank Account)</option>
-            <option value="Bank Audi ••••7790 (External Bank Account)">Bank Audi ••••7790 (External Bank Account)</option>
-            <option value="Visa Debit ••••8842 (Linked Card)">Visa Debit ••••8842 (Linked Card)</option>
-            <option value="Cash Deposit (Branch)">Cash Deposit (Branch)</option>
-          </select>
-          <input
-            type="number" step="0.01" min="0.01" required
-            value={depositAmount}
-            onChange={(e) => setDepositAmount(e.target.value)}
-            placeholder="Amount"
-            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm mb-2 font-mono"
-          />
-          <button disabled={actionLoading} className="w-full bg-ink-950 text-white py-2 rounded-lg text-sm font-medium hover:bg-ink-900 transition disabled:opacity-50">
-            Deposit
-          </button>
+          {fundingSources.length === 0 ? (
+            <div>
+              <p className="text-xs text-stone-500 mb-2">
+                You need a verified funding source before you can deposit.
+              </p>
+              <Link
+                to="/linked-accounts"
+                className="inline-block text-sm text-crimson-600 hover:underline"
+              >
+                Link a bank account →
+              </Link>
+            </div>
+          ) : (
+            <>
+              <select
+                required value={depositSourceId} onChange={(e) => setDepositSourceId(e.target.value)}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm mb-2"
+              >
+                {fundingSources.map((s) => (
+                  <option key={s.id} value={s.id}>{s.bank_name} {s.masked_account_number}</option>
+                ))}
+              </select>
+              <input
+                type="number" step="0.01" min="0.01" required
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                placeholder="Amount"
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm mb-2 font-mono"
+              />
+              <button disabled={actionLoading} className="w-full bg-ink-950 text-white py-2 rounded-lg text-sm font-medium hover:bg-ink-900 transition disabled:opacity-50">
+                Deposit
+              </button>
+            </>
+          )}
         </form>
 
         <form onSubmit={handleWithdraw} className="bg-white rounded-xl p-4 border border-stone-300/40">

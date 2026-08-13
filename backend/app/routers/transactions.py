@@ -8,11 +8,11 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.email import send_transaction_email
-from app.core.limits import check_transaction_limits
+from app.core.limits import check_transaction_limits, check_deposit_source_limit
 from app.core.fraud_detection import check_transaction_for_fraud
 from app.core.account_access import get_accessible_account_ids, user_can_access_account
 from app.core.exchange_rates import convert as convert_currency
-from app.models.models import Account, Transaction, TransactionType, TransactionStatus, User, TransferVerification
+from app.models.models import Account, Transaction, TransactionType, TransactionStatus, User, TransferVerification, FundingSource, FundingSourceStatus
 from app.schemas.transaction import DepositRequest, WithdrawalRequest, TransferRequest, TransactionOut, PhoneTransferInitiateRequest, PhoneTransferConfirmRequest
 from app.core.email import send_transfer_otp_email
 
@@ -39,10 +39,20 @@ async def deposit(
 ):
     account = await _get_owned_account(db, payload.account_id, current_user)
 
+    source_result = await db.execute(select(FundingSource).where(FundingSource.id == payload.funding_source_id))
+    funding_source = source_result.scalar_one_or_none()
+    if not funding_source or funding_source.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Funding source not found")
+    if funding_source.status != FundingSourceStatus.verified:
+        raise HTTPException(status_code=400, detail="This funding source hasn't been verified yet. Verify it before depositing from it.")
+
     try:
         await check_transaction_limits(db, account, payload.amount, is_outgoing=False)
+        check_deposit_source_limit(funding_source, payload.amount)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    source_label = f"{funding_source.bank_name} {funding_source.masked_account_number}"
 
     account.balance += payload.amount
     tx = Transaction(
@@ -51,7 +61,7 @@ async def deposit(
         amount=payload.amount,
         status=TransactionStatus.completed,
         initiated_by=current_user.id,
-        source=payload.source,
+        source=source_label,
     )
     db.add(tx)
     await db.commit()
@@ -60,7 +70,7 @@ async def deposit(
     try:
         send_transaction_email(
             current_user.email, current_user.full_name, "deposit",
-            f"{payload.amount} {account.currency} (via {payload.source})",
+            f"{payload.amount} {account.currency} (via {source_label})",
             account.nickname or account.type.value,
             f"{account.balance} {account.currency}",
         )

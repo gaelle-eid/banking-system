@@ -9,7 +9,6 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID
 
 
 # revision identifiers, used by Alembic.
@@ -21,25 +20,35 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    funding_source_status_enum = sa.Enum('pending_verification', 'verified', 'failed', name='fundingsourcestatus')
-    funding_source_status_enum.create(op.get_bind(), checkfirst=True)
+    # Raw SQL throughout, sidestepping SQLAlchemy's automatic enum-type
+    # creation (which double-creates the type when a column-level Enum is
+    # combined with an explicitly pre-created one). The DO block makes type
+    # creation idempotent regardless of what state the DB is already in.
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE fundingsourcestatus AS ENUM ('pending_verification', 'verified', 'failed');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
 
-    op.create_table(
-        'funding_sources',
-        sa.Column('id', UUID(as_uuid=False), primary_key=True),
-        sa.Column('user_id', UUID(as_uuid=False), sa.ForeignKey('users.id'), nullable=False),
-        sa.Column('bank_name', sa.String(), nullable=False),
-        sa.Column('masked_account_number', sa.String(), nullable=False),
-        sa.Column('status', funding_source_status_enum, nullable=False, server_default='pending_verification'),
-        sa.Column('micro_deposit_1', sa.Numeric(4, 2), nullable=True),
-        sa.Column('micro_deposit_2', sa.Numeric(4, 2), nullable=True),
-        sa.Column('verification_attempts', sa.Numeric(), nullable=False, server_default='0'),
-        sa.Column('created_at', sa.DateTime(), nullable=True),
-        sa.Column('verified_at', sa.DateTime(), nullable=True),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS funding_sources (
+            id UUID PRIMARY KEY,
+            user_id UUID NOT NULL REFERENCES users(id),
+            bank_name VARCHAR NOT NULL,
+            masked_account_number VARCHAR NOT NULL,
+            status fundingsourcestatus NOT NULL DEFAULT 'pending_verification',
+            micro_deposit_1 NUMERIC(4,2),
+            micro_deposit_2 NUMERIC(4,2),
+            verification_attempts NUMERIC NOT NULL DEFAULT 0,
+            created_at TIMESTAMP,
+            verified_at TIMESTAMP
+        );
+    """)
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_table('funding_sources')
-    sa.Enum(name='fundingsourcestatus').drop(op.get_bind(), checkfirst=True)
+    op.execute("DROP TABLE IF EXISTS funding_sources;")
+    op.execute("DROP TYPE IF EXISTS fundingsourcestatus;")

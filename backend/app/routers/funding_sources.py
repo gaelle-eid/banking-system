@@ -53,12 +53,14 @@ async def link_funding_source(
         verification_attempts=0,
     )
     db.add(source)
+    await db.commit()
+    await db.refresh(source)
+
     await log_action(
         db, current_user.id, "linked_funding_source", "funding_source", source.id,
         details={"bank_name": payload.bank_name, "masked_account_number": source.masked_account_number},
     )
     await db.commit()
-    await db.refresh(source)
 
     return FundingSourceCreatedOut(
         id=source.id, bank_name=source.bank_name, masked_account_number=source.masked_account_number,

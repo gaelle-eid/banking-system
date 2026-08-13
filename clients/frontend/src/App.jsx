@@ -14,6 +14,7 @@ import VerifyEmail from './pages/VerifyEmail'
 import Statements from './pages/Statements'
 import Profile from './pages/Profile'
 import Goals from './pages/Goals'
+import LinkedAccounts from './pages/LinkedAccounts'
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/statements" element={<ProtectedRoute><Statements /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/goals" element={<ProtectedRoute><Goals /></ProtectedRoute>} />
+          <Route path="/linked-accounts" element={<ProtectedRoute><LinkedAccounts /></ProtectedRoute>} />
           <Route
             path="/dashboard"
             element={
