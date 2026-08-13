@@ -1,30 +1,56 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import api from '../lib/api'
 import Layout from '../components/Layout'
 import StatusBadge from '../components/StatusBadge'
 import { useToast } from '../context/ToastContext'
 import { formatDate } from '../lib/format'
 
+const TIER_STYLES = {
+  standard: {
+    base: 'linear-gradient(135deg, #1F1917 0%, #16110F 60%, #16110F 100%)',
+    accent: 'linear-gradient(120deg, transparent 40%, rgba(120,113,108,0.35) 75%, rgba(120,113,108,0.55) 100%)',
+  },
+  cashback: {
+    base: 'linear-gradient(135deg, #14251F 0%, #0E1A16 60%, #0E1A16 100%)',
+    accent: 'linear-gradient(120deg, transparent 40%, rgba(16,145,90,0.35) 75%, rgba(16,145,90,0.55) 100%)',
+  },
+  travel: {
+    base: 'linear-gradient(135deg, #131C2E 0%, #0D1420 60%, #0D1420 100%)',
+    accent: 'linear-gradient(120deg, transparent 40%, rgba(37,99,235,0.35) 75%, rgba(37,99,235,0.55) 100%)',
+  },
+  premium: {
+    base: 'linear-gradient(135deg, #23200F 0%, #17140A 60%, #17140A 100%)',
+    accent: 'linear-gradient(120deg, transparent 40%, rgba(202,163,74,0.4) 75%, rgba(202,163,74,0.6) 100%)',
+  },
+}
+
 export default function Cards() {
   const [cards, setCards] = useState([])
   const [accounts, setAccounts] = useState([])
+  const [tierInfo, setTierInfo] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [accountId, setAccountId] = useState('')
   const [cardType, setCardType] = useState('debit')
+  const [cardTier, setCardTier] = useState('standard')
+  const [showCompare, setShowCompare] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [cancellingId, setCancellingId] = useState(null)
   const [activatingId, setActivatingId] = useState(null)
+  const [freezingId, setFreezingId] = useState(null)
   const { showToast } = useToast()
 
   async function loadData() {
-    const [cardsRes, accountsRes] = await Promise.all([
+    const [cardsRes, accountsRes, tierRes] = await Promise.all([
       api.get('/cards/me'),
       api.get('/accounts/me'),
+      api.get('/cards/tier-info'),
     ])
     setCards(cardsRes.data)
     setAccounts(accountsRes.data)
+    setTierInfo(tierRes.data)
     setLoading(false)
   }
 
@@ -37,7 +63,7 @@ export default function Cards() {
     setError('')
     setSubmitting(true)
     try {
-      await api.post('/cards', { account_id: accountId, type: cardType })
+      await api.post('/cards', { account_id: accountId, type: cardType, tier: cardTier })
       setAccountId('')
       setShowForm(false)
       await loadData()
@@ -71,6 +97,19 @@ export default function Cards() {
       showToast(err.response?.data?.detail || 'Could not activate card', 'error')
     } finally {
       setActivatingId(null)
+    }
+  }
+
+  async function handleToggleFreeze(cardId, isFrozen) {
+    setFreezingId(cardId)
+    try {
+      await api.patch(`/cards/${cardId}/${isFrozen ? 'unfreeze' : 'freeze'}`)
+      showToast(isFrozen ? 'Card unfrozen' : 'Card frozen')
+      await loadData()
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Could not update card', 'error')
+    } finally {
+      setFreezingId(null)
     }
   }
 
@@ -114,6 +153,74 @@ export default function Cards() {
                 <option value="credit">Credit</option>
               </select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-ink-950 mb-1">Tier</label>
+              <select
+                value={cardTier} onChange={(e) => setCardTier(e.target.value)}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              >
+                <option value="standard">Standard</option>
+                <option value="cashback">Cashback</option>
+                <option value="travel">Travel</option>
+                <option value="premium">Premium</option>
+              </select>
+              {tierInfo && (
+                <p className="text-xs text-stone-500 mt-1">
+                  {tierInfo[cardTier].perks} ATM limit: ${Number(tierInfo[cardTier].atm_daily_limit).toFixed(0)}/day.
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowCompare(!showCompare)}
+                className="text-xs text-ink-950 underline mt-1"
+              >
+                {showCompare ? 'Hide comparison' : 'Compare all tiers'}
+              </button>
+              {showCompare && tierInfo && (
+                <div className="mt-2 overflow-x-auto border border-stone-300/40 rounded-lg">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="text-left text-stone-500 bg-stone-300/10">
+                        <th className="py-1.5 px-2 font-medium"></th>
+                        <th className="py-1.5 px-2 font-medium capitalize">Standard</th>
+                        <th className="py-1.5 px-2 font-medium capitalize">Cashback</th>
+                        <th className="py-1.5 px-2 font-medium capitalize">Travel</th>
+                        <th className="py-1.5 px-2 font-medium capitalize">Premium</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-ink-950">
+                      <tr className="border-t border-stone-300/40">
+                        <td className="py-1.5 px-2 text-stone-500">ATM limit/day</td>
+                        {['standard', 'cashback', 'travel', 'premium'].map((t) => (
+                          <td key={t} className="py-1.5 px-2 font-mono">${Number(tierInfo[t].atm_daily_limit).toFixed(0)}</td>
+                        ))}
+                      </tr>
+                      <tr className="border-t border-stone-300/40">
+                        <td className="py-1.5 px-2 text-stone-500">Annual fee</td>
+                        {['standard', 'cashback', 'travel', 'premium'].map((t) => (
+                          <td key={t} className="py-1.5 px-2 font-mono">${Number(tierInfo[t].annual_fee).toFixed(0)}</td>
+                        ))}
+                      </tr>
+                      <tr className="border-t border-stone-300/40">
+                        <td className="py-1.5 px-2 text-stone-500">Rewards</td>
+                        {['standard', 'cashback', 'travel', 'premium'].map((t) => (
+                          <td key={t} className="py-1.5 px-2">{tierInfo[t].rewards}</td>
+                        ))}
+                      </tr>
+                      <tr className="border-t border-stone-300/40">
+                        <td className="py-1.5 px-2 text-stone-500">Foreign fee</td>
+                        {['standard', 'cashback', 'travel', 'premium'].map((t) => (
+                          <td key={t} className="py-1.5 px-2">{tierInfo[t].foreign_fee}</td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <Link to="/assistant" className="text-xs text-crimson-600 hover:underline mt-1 inline-block">
+                Not sure? Ask the Assistant to recommend a tier for you →
+              </Link>
+            </div>
             {error && <p className="text-crimson-600 text-sm">{error}</p>}
             <button disabled={submitting} className="w-full bg-ink-950 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-ink-900 transition disabled:opacity-50">
               {submitting ? 'Submitting...' : 'Submit request'}
@@ -128,23 +235,38 @@ export default function Cards() {
         <p className="text-stone-500 text-sm">No cards yet.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {cards.map((card) => (
+          {cards.map((card) => {
+            const style = TIER_STYLES[card.tier] || TIER_STYLES.standard
+            return (
             <div
               key={card.id}
               className="relative rounded-2xl p-6 overflow-hidden text-white"
-              style={{ background: 'linear-gradient(135deg, #1F1917 0%, #16110F 60%, #16110F 100%)' }}
+              style={{ background: style.base }}
             >
               <div
                 className="absolute inset-0"
-                style={{ background: 'linear-gradient(120deg, transparent 40%, rgba(196,30,58,0.35) 75%, rgba(196,30,58,0.55) 100%)' }}
+                style={{ background: style.accent }}
               />
               <div className="relative">
                 <div className="flex justify-between items-start mb-8">
-                  <span className="text-xs uppercase tracking-wide text-stone-300">{card.type}</span>
-                  <StatusBadge status={card.status} />
+                  <span className="text-xs uppercase tracking-wide text-stone-300">{card.type} · {card.tier}</span>
+                  <div className="flex items-center gap-1.5">
+                    {card.frozen && (
+                      <span className="text-[10px] uppercase tracking-wide bg-white/15 text-white px-2 py-0.5 rounded-full">
+                        Frozen
+                      </span>
+                    )}
+                    <StatusBadge status={card.status} />
+                  </div>
                 </div>
                 <p className="font-mono text-lg tracking-[0.2em] mb-1">{card.masked_number}</p>
+                {card.account_nickname && (
+                  <p className="text-xs text-stone-300 mb-1">Linked to {card.account_nickname}</p>
+                )}
                 <p className="text-xs text-stone-300 mb-3">Expires {formatDate(card.expiry_date)}</p>
+                {tierInfo && tierInfo[card.tier] && (
+                  <p className="text-[11px] text-stone-300 mb-3">{tierInfo[card.tier].perks}</p>
+                )}
                 {card.status === 'active' && !card.activated_at && (
                   <div className="mb-1">
                     <p className="text-[11px] text-stone-300 mb-1.5">Approved - not yet activated</p>
@@ -158,17 +280,27 @@ export default function Cards() {
                   </div>
                 )}
                 {card.status === 'active' && card.activated_at && (
-                  <button
-                    onClick={() => handleCancel(card.id)}
-                    disabled={cancellingId === card.id}
-                    className="text-xs text-stone-300 hover:text-white underline disabled:opacity-50"
-                  >
-                    {cancellingId === card.id ? 'Cancelling...' : 'Cancel this card'}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => handleToggleFreeze(card.id, card.frozen)}
+                      disabled={freezingId === card.id}
+                      className="text-xs bg-white text-ink-950 px-2.5 py-1 rounded-md font-medium hover:bg-stone-100 transition disabled:opacity-50"
+                    >
+                      {freezingId === card.id ? '...' : card.frozen ? 'Unfreeze' : 'Freeze this card'}
+                    </button>
+                    <button
+                      onClick={() => handleCancel(card.id)}
+                      disabled={cancellingId === card.id}
+                      className="text-xs text-stone-300 hover:text-white underline disabled:opacity-50"
+                    >
+                      {cancellingId === card.id ? 'Cancelling...' : 'Cancel'}
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </Layout>

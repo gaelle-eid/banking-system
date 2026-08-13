@@ -114,6 +114,8 @@ async def withdraw(
             raise HTTPException(status_code=400, detail=f"This card is {card.status.value}, not active - ATM withdrawal isn't available")
         if not card.activated_at:
             raise HTTPException(status_code=400, detail="Please activate this card before using it - go to Cards to activate it.")
+        if card.frozen:
+            raise HTTPException(status_code=400, detail="This card is frozen. Unfreeze it in Cards before using it.")
         method_label = f"ATM - Debit Card {card.masked_number[-9:]}"
     elif payload.method == "branch_teller":
         method_label = "Branch Teller Withdrawal"

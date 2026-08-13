@@ -215,7 +215,8 @@ class Card(Base):
     tier = Column(Enum(CardTier), default=CardTier.standard)
     status = Column(Enum(CardStatus), default=CardStatus.active)
     expiry_date = Column(DateTime, nullable=False)
-    activated_at = Column(DateTime, nullable=True)
+    activated_at = Column(DateTime, nullable=True)  # employee approval alone doesn't make a card usable - client must activate it
+    frozen = Column(Boolean, default=False, nullable=False)  # instant, reversible lock - distinct from cancel (permanent)
     created_at = Column(DateTime, default=datetime.utcnow)
 class Statement(Base):
     __tablename__ = "statements"

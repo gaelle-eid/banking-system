@@ -48,7 +48,7 @@ export default function AccountDetail() {
     setFundingSources(verified)
     setDepositSourceId((prev) => prev || verified[0]?.id || '')
     const accountDebitCards = cardsRes.data.filter((c) => c.account_id === id && c.type === 'debit')
-    const activeDebitCards = accountDebitCards.filter((c) => c.status === 'active' && c.activated_at)
+    const activeDebitCards = accountDebitCards.filter((c) => c.status === 'active' && c.activated_at && !c.frozen)
     setHasUnactivatedCard(accountDebitCards.some((c) => c.status === 'active' && !c.activated_at))
     setDebitCards(activeDebitCards)
     setWithdrawCardId((prev) => prev || activeDebitCards[0]?.id || '')
