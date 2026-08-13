@@ -17,8 +17,13 @@ export default function Assistant() {
   }, [messages])
 
   function extractActionId(text) {
-    const labeledMatch = text.match(/action\s*id[:\s]*([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i)
-    return labeledMatch ? labeledMatch[1] : null
+    const labeledMatch = text.match(/action\s*id[:\s*`]*([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i)
+    if (labeledMatch) return labeledMatch[1]
+    // Fallback: the AI's proposal messages always contain exactly one UUID
+    // (the action id) - if markdown formatting broke the labeled match above,
+    // just grab any UUID-shaped string in the message.
+    const anyUuid = text.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i)
+    return anyUuid ? anyUuid[1] : null
   }
 
   async function sendMessage(e) {
@@ -35,11 +40,11 @@ export default function Assistant() {
       const actionId = extractActionId(reply)
 
       setMessages((prev) => {
-        const newMessages = [...prev, { role: 'assistant', content: reply }]
+        const newIndex = prev.length
         if (actionId) {
-          setPendingActions((pa) => ({ ...pa, [newMessages.length - 1]: actionId }))
+          setPendingActions((pa) => ({ ...pa, [newIndex]: actionId }))
         }
-        return newMessages
+        return [...prev, { role: 'assistant', content: reply }]
       })
     } catch (err) {
       setMessages((prev) => [...prev, { role: 'assistant', content: 'Sorry, something went wrong.' }])
