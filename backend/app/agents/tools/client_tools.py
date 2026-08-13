@@ -377,7 +377,6 @@ async def recommend_card_tier(ctx: RunContext[ClientAgentDeps]) -> str:
     )
 
 
-
 async def propose_phone_transfer(
     ctx: RunContext[ClientAgentDeps],
     amount: float,
@@ -402,6 +401,8 @@ async def propose_phone_transfer(
     recipient = result.scalar_one_or_none()
     if not recipient:
         return "I couldn't find a client with that phone number."
+    if not recipient.phone_verified:
+        return f"{recipient.full_name}'s phone number isn't verified, so I can't send to it."
 
     result = await ctx.deps.db.execute(select(Account).where(Account.owner_id == recipient.id).limit(1))
     to_account = result.scalar_one_or_none()
@@ -412,6 +413,13 @@ async def propose_phone_transfer(
     from datetime import datetime, timedelta
     from app.models.models import TransferVerification
     from app.core.email import send_transfer_otp_email
+    from app.core.limits import is_new_phone_recipient, check_new_recipient_transfer_limit
+
+    is_new = await is_new_phone_recipient(ctx.deps.db, ctx.deps.user_id, to_account.id)
+    try:
+        check_new_recipient_transfer_limit(is_new, Decimal(str(amount)))
+    except ValueError as e:
+        return str(e)
 
     otp = f"{random.randint(0, 999999):06d}"
     verification = TransferVerification(
@@ -438,7 +446,6 @@ async def propose_phone_transfer(
         f"Reply with the 6-digit code to complete the transfer. Verification id: {verification.id}"
     )
 
-
 async def confirm_phone_transfer_otp(
     ctx: RunContext[ClientAgentDeps],
     verification_id: str,
@@ -458,10 +465,20 @@ async def confirm_phone_transfer_otp(
         return "This isn't your transfer to confirm."
     if verification.verified:
         return "This transfer was already completed."
+    if verification.locked:
+        return "Too many incorrect attempts were made on this transfer. Please start a new one."
     if datetime.utcnow() > verification.otp_expires_at:
         return "That code has expired. Please start the transfer again."
     if otp != verification.otp:
-        return "That code doesn't match. Please check and try again."
+        from app.core.limits import MAX_OTP_ATTEMPTS
+        verification.attempts = int(verification.attempts) + 1
+        if int(verification.attempts) >= MAX_OTP_ATTEMPTS:
+            verification.locked = True
+            await ctx.deps.db.flush()
+            return "That code doesn't match, and you've hit the maximum attempts - this transfer has been cancelled. Please start again."
+        await ctx.deps.db.flush()
+        remaining = MAX_OTP_ATTEMPTS - int(verification.attempts)
+        return f"That code doesn't match. You have {remaining} attempt{'s' if remaining != 1 else ''} left."
 
     from_result = await ctx.deps.db.execute(select(Account).where(Account.id == verification.from_account_id))
     from_account = from_result.scalar_one_or_none()
@@ -507,8 +524,6 @@ async def confirm_phone_transfer_otp(
     if exchange_rate:
         return f"Transfer completed successfully - {verification.amount} {from_account.currency} converted to {credit_amount} {to_account.currency}."
     return f"Transfer of {verification.amount} completed successfully."
-
-
 async def analyze_spending(ctx: RunContext[ClientAgentDeps], account_nickname: str | None = None) -> str:
     """Analyze the client's recent spending (withdrawals and outgoing
     transfers) and give concrete, actionable advice on where they could

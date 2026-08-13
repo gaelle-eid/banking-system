@@ -315,6 +315,8 @@ class TransferVerification(Base):
     otp = Column(String, nullable=False)
     otp_expires_at = Column(DateTime, nullable=False)
     verified = Column(Boolean, default=False, nullable=False)
+    attempts = Column(Numeric, default=0, nullable=False)  # wrong-code attempts, locks after 3
+    locked = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

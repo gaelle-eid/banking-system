@@ -7,6 +7,7 @@ export default function PhoneTransferForm({ accountId, onSuccess }) {
   const [amount, setAmount] = useState('')
   const [stage, setStage] = useState('form') // 'form' | 'otp'
   const [verificationId, setVerificationId] = useState(null)
+  const [recipientName, setRecipientName] = useState('')
   const [otp, setOtp] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -23,6 +24,7 @@ export default function PhoneTransferForm({ accountId, onSuccess }) {
         amount: parseFloat(amount),
       })
       setVerificationId(res.data.verification_id)
+      setRecipientName(res.data.recipient_name)
       setStage('otp')
     } catch (err) {
       setError(err.response?.data?.detail || 'Could not start transfer')
@@ -57,6 +59,9 @@ export default function PhoneTransferForm({ accountId, onSuccess }) {
     return (
       <form onSubmit={handleConfirm} className="bg-white rounded-xl p-4 border border-stone-300/40">
         <h3 className="font-medium text-sm mb-1 text-ink-950">Enter code</h3>
+        <p className="text-xs text-stone-500 mb-1">
+          Sending {amount} {' '}to <span className="font-medium text-ink-950">{recipientName}</span> ({phone})
+        </p>
         <p className="text-xs text-stone-500 mb-3">We emailed you a 6-digit verification code.</p>
         <input
           type="text"

@@ -8,12 +8,12 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.email import send_transaction_email
-from app.core.limits import check_transaction_limits, check_deposit_source_limit, check_atm_withdrawal_limit, MAX_CASH_BACK_PER_TRANSACTION
+from app.core.limits import check_transaction_limits, check_deposit_source_limit, check_atm_withdrawal_limit, MAX_CASH_BACK_PER_TRANSACTION, is_new_phone_recipient, check_new_recipient_transfer_limit, MAX_OTP_ATTEMPTS
 from app.core.fraud_detection import check_transaction_for_fraud
 from app.core.account_access import get_accessible_account_ids, user_can_access_account
 from app.core.exchange_rates import convert as convert_currency
 from app.models.models import Account, Transaction, TransactionType, TransactionStatus, User, TransferVerification, FundingSource, FundingSourceStatus, Card, CardType, CardStatus
-from app.schemas.transaction import DepositRequest, WithdrawalRequest, TransferRequest, TransactionOut, PhoneTransferInitiateRequest, PhoneTransferConfirmRequest
+from app.schemas.transaction import DepositRequest, WithdrawalRequest, TransferRequest, TransactionOut, PhoneTransferInitiateRequest, PhoneTransferInitiateOut, PhoneTransferConfirmRequest
 from app.core.email import send_transfer_otp_email
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
@@ -325,7 +325,7 @@ async def get_recent_recipients(
     return list(seen_users.values())[:10]
 
 
-@router.post("/phone-transfer/initiate")
+@router.post("/phone-transfer/initiate", response_model=PhoneTransferInitiateOut)
 async def initiate_phone_transfer(
     payload: PhoneTransferInitiateRequest,
     current_user: User = Depends(get_current_user),
@@ -337,6 +337,8 @@ async def initiate_phone_transfer(
     recipient = result.scalar_one_or_none()
     if not recipient:
         raise HTTPException(status_code=404, detail="No client found with that phone number")
+    if not recipient.phone_verified:
+        raise HTTPException(status_code=400, detail=f"{recipient.full_name}'s phone number isn't verified, so transfers to it aren't available.")
 
     result = await db.execute(select(Account).where(Account.owner_id == recipient.id).limit(1))
     to_account = result.scalar_one_or_none()
@@ -346,8 +348,11 @@ async def initiate_phone_transfer(
     if from_account.balance < payload.amount:
         raise HTTPException(status_code=400, detail="Insufficient funds")
 
+    is_new = await is_new_phone_recipient(db, current_user.id, to_account.id)
+
     try:
         await check_transaction_limits(db, from_account, payload.amount, is_outgoing=True)
+        check_new_recipient_transfer_limit(is_new, payload.amount)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -369,7 +374,11 @@ async def initiate_phone_transfer(
     except Exception:
         pass
 
-    return {"verification_id": verification.id, "message": f"Verification code sent. Confirm to send {payload.amount} to {recipient.full_name}."}
+    return PhoneTransferInitiateOut(
+        verification_id=verification.id,
+        recipient_name=recipient.full_name,
+        message=f"Verification code sent. Confirm to send {payload.amount} {from_account.currency} to {recipient.full_name}.",
+    )
 
 
 @router.post("/phone-transfer/confirm", response_model=list[TransactionOut])
@@ -386,10 +395,19 @@ async def confirm_phone_transfer(
         raise HTTPException(status_code=403, detail="Not your transfer")
     if verification.verified:
         raise HTTPException(status_code=400, detail="This transfer was already completed")
+    if verification.locked:
+        raise HTTPException(status_code=400, detail="Too many incorrect attempts. Please start the transfer again.")
     if datetime.utcnow() > verification.otp_expires_at:
         raise HTTPException(status_code=400, detail="This code has expired. Please start the transfer again.")
     if payload.otp != verification.otp:
-        raise HTTPException(status_code=400, detail="Incorrect code")
+        verification.attempts = int(verification.attempts) + 1
+        if int(verification.attempts) >= MAX_OTP_ATTEMPTS:
+            verification.locked = True
+            await db.commit()
+            raise HTTPException(status_code=400, detail="Too many incorrect attempts. This transfer has been cancelled - please start again.")
+        await db.commit()
+        remaining = MAX_OTP_ATTEMPTS - int(verification.attempts)
+        raise HTTPException(status_code=400, detail=f"Incorrect code. {remaining} attempt{'s' if remaining != 1 else ''} left.")
 
     from_result = await db.execute(select(Account).where(Account.id == verification.from_account_id))
     from_account = from_result.scalar_one_or_none()

@@ -12,6 +12,8 @@ MIN_BALANCE_AFTER_WITHDRAWAL = Decimal("10")
 NEW_FUNDING_SOURCE_DEPOSIT_CAP = Decimal("500")
 NEW_FUNDING_SOURCE_WINDOW_HOURS = 24
 MAX_CASH_BACK_PER_TRANSACTION = Decimal("100")
+NEW_RECIPIENT_PHONE_TRANSFER_CAP = Decimal("200")
+MAX_OTP_ATTEMPTS = 3
 
 # ATM daily cash limits vary by card tier, matching how real banks tie
 # withdrawal limits to account/card tier.
@@ -102,4 +104,28 @@ async def check_atm_withdrawal_limit(db: AsyncSession, account_id: str, amount: 
             f"This would exceed your card's daily ATM withdrawal limit of {daily_cap}. "
             f"You have {max(remaining, Decimal(0))} remaining today. "
             f"For larger amounts, try a branch teller withdrawal instead."
+        )
+
+
+async def is_new_phone_recipient(db: AsyncSession, sender_user_id: str, to_account_id: str) -> bool:
+    """A recipient is 'new' if the sender has never successfully completed
+    a transfer to one of their accounts before. First-time transfers get
+    extra scrutiny (a lower cap), matching real-world fraud prevention."""
+    from app.models.models import TransferVerification
+
+    result = await db.execute(
+        select(TransferVerification.id).where(
+            TransferVerification.initiated_by == sender_user_id,
+            TransferVerification.to_account_id == to_account_id,
+            TransferVerification.verified == True,
+        ).limit(1)
+    )
+    return result.scalar_one_or_none() is None
+
+def check_new_recipient_transfer_limit(is_new: bool, amount: Decimal):
+    if is_new and amount > NEW_RECIPIENT_PHONE_TRANSFER_CAP:
+        raise ValueError(
+            f"This is your first transfer to this recipient, so it's capped at "
+            f"{NEW_RECIPIENT_PHONE_TRANSFER_CAP} for extra security. "
+            f"Future transfers to them won't have this limit."
         )

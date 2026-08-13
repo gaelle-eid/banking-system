@@ -45,6 +45,12 @@ class PhoneTransferInitiateRequest(BaseModel):
     amount: Decimal = Field(gt=0)
 
 
+class PhoneTransferInitiateOut(BaseModel):
+    verification_id: str
+    recipient_name: str
+    message: str
+
+
 class PhoneTransferConfirmRequest(BaseModel):
     verification_id: str
     otp: str
