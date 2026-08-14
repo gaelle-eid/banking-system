@@ -16,6 +16,7 @@ from app.models.models import User
 from app.schemas.auth import (
     UserRegister, UserLogin, TokenResponse, UserOut,
     VerifyResponse, ResendVerificationRequest, VerifyPhoneOtpRequest,
+    ProfileUpdateRequest, ChangePasswordRequest,
 )
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -213,6 +214,76 @@ async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)):
     return TokenResponse(access_token=token)
 
 
+def _mask_national_id(national_id: str | None) -> str | None:
+    if not national_id or len(national_id) < 4:
+        return None
+    return f"****{national_id[-4:]}"
+
+
 @router.get("/me", response_model=UserOut)
 async def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+    return UserOut(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        phone=current_user.phone,
+        phone_verified=current_user.phone_verified,
+        address=current_user.address,
+        date_of_birth=current_user.date_of_birth,
+        national_id_masked=_mask_national_id(current_user.national_id),
+        role=current_user.role,
+        is_verified=current_user.is_verified,
+        registration_status=current_user.registration_status.value if current_user.registration_status else None,
+        last_login_at=current_user.last_login_at,
+    )
+
+
+@router.patch("/me", response_model=UserOut)
+async def update_profile(
+    payload: ProfileUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update contact info (phone, address). Identity fields (name, date
+    of birth, national ID) can't be changed here - matching real banking
+    practice, those require verified support/branch involvement."""
+    if payload.phone is not None and payload.phone != current_user.phone:
+        current_user.phone = payload.phone
+        current_user.phone_verified = False  # changing the number means it needs re-verification
+
+    if payload.address is not None:
+        current_user.address = payload.address
+
+    await db.commit()
+    await db.refresh(current_user)
+
+    return UserOut(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        phone=current_user.phone,
+        phone_verified=current_user.phone_verified,
+        address=current_user.address,
+        date_of_birth=current_user.date_of_birth,
+        national_id_masked=_mask_national_id(current_user.national_id),
+        role=current_user.role,
+        is_verified=current_user.is_verified,
+        registration_status=current_user.registration_status.value if current_user.registration_status else None,
+        last_login_at=current_user.last_login_at,
+    )
+
+
+@router.post("/me/change-password", response_model=VerifyResponse)
+async def change_password(
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if payload.new_password == payload.current_password:
+        raise HTTPException(status_code=400, detail="New password must be different from your current password")
+
+    current_user.password_hash = hash_password(payload.new_password)
+    await db.commit()
+    return VerifyResponse(message="Password changed successfully")
