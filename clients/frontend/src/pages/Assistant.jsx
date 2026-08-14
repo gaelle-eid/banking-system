@@ -10,6 +10,8 @@ export default function Assistant() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [pendingActions, setPendingActions] = useState({})
+  const [pendingStatements, setPendingStatements] = useState({})
+  const [downloadingIndex, setDownloadingIndex] = useState(null)
   const bottomRef = useRef(null)
 
   useEffect(() => {
@@ -26,6 +28,11 @@ export default function Assistant() {
     return anyUuid ? anyUuid[1] : null
   }
 
+  function extractStatementId(text) {
+    const match = text.match(/statement\s*id[:\s*`]*([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i)
+    return match ? match[1] : null
+  }
+
   async function sendMessage(e) {
     e.preventDefault()
     if (!input.trim()) return
@@ -37,11 +44,14 @@ export default function Assistant() {
     try {
       const res = await api.post('/agent/client/chat', { message: input })
       const reply = res.data.reply
-      const actionId = extractActionId(reply)
+      const statementId = extractStatementId(reply)
+      const actionId = statementId ? null : extractActionId(reply)
 
       setMessages((prev) => {
         const newIndex = prev.length
-        if (actionId) {
+        if (statementId) {
+          setPendingStatements((ps) => ({ ...ps, [newIndex]: statementId }))
+        } else if (actionId) {
           setPendingActions((pa) => ({ ...pa, [newIndex]: actionId }))
         }
         return [...prev, { role: 'assistant', content: reply }]
@@ -59,6 +69,8 @@ export default function Assistant() {
       let confirmMessage = 'Transfer confirmed and completed.'
       if (res.data.goal_account_nickname) {
         confirmMessage = `Savings goal "${res.data.goal_account_nickname}" created successfully.`
+      } else if (res.data.loan_repayment) {
+        confirmMessage = `Payment of ${res.data.amount} applied. Remaining balance: ${res.data.remaining_balance}.`
       } else if (res.data.goal_contribution) {
         confirmMessage = `Contribution of ${res.data.amount} completed successfully.`
       }
@@ -76,6 +88,25 @@ export default function Assistant() {
       setPendingActions((pa) => { const n = { ...pa }; delete n[index]; return n })
     } catch (err) {
       setMessages((prev) => [...prev, { role: 'assistant', content: err.response?.data?.detail || 'Could not cancel.' }])
+    }
+  }
+
+  async function handleDownloadStatement(index, statementId) {
+    setDownloadingIndex(index)
+    try {
+      const res = await api.get(`/statements/detail/${statementId}/pdf`, { responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'statement.pdf'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      setMessages((prev) => [...prev, { role: 'assistant', content: 'Could not download the PDF.' }])
+    } finally {
+      setDownloadingIndex(null)
     }
   }
 
@@ -97,6 +128,17 @@ export default function Assistant() {
                   <div className="flex gap-2 mt-3">
                     <button onClick={() => handleConfirm(i, pendingActions[i])} className="px-3 py-1.5 bg-crimson-600 text-white rounded-lg text-xs font-medium hover:bg-crimson-700 transition">Confirm</button>
                     <button onClick={() => handleReject(i, pendingActions[i])} className="px-3 py-1.5 border border-stone-300 text-ink-950 rounded-lg text-xs font-medium hover:bg-white transition">Cancel</button>
+                  </div>
+                )}
+                {pendingStatements[i] && (
+                  <div className="mt-3">
+                    <button
+                      onClick={() => handleDownloadStatement(i, pendingStatements[i])}
+                      disabled={downloadingIndex === i}
+                      className="px-3 py-1.5 bg-ink-950 text-white rounded-lg text-xs font-medium hover:bg-ink-900 transition disabled:opacity-50"
+                    >
+                      {downloadingIndex === i ? 'Downloading...' : 'Download PDF'}
+                    </button>
                   </div>
                 )}
               </div>

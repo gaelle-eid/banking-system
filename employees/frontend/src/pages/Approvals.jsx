@@ -18,6 +18,7 @@ export default function Approvals() {
   const [statusFilter, setStatusFilter] = useState('pending')
   const [expandedId, setExpandedId] = useState(null)
   const [notes, setNotes] = useState('')
+  const [interestRate, setInterestRate] = useState('')
   const [processingId, setProcessingId] = useState(null)
   const { showToast } = useToast()
 
@@ -33,13 +34,22 @@ export default function Approvals() {
     loadApprovals()
   }, [statusFilter])
 
-  async function handleDecision(id, decision) {
+  async function handleDecision(id, decision, entityType) {
+    if (decision === 'approve' && entityType === 'loan' && !interestRate) {
+      showToast('Set an interest rate before approving this loan', 'error')
+      return
+    }
     setProcessingId(id)
     try {
-      await api.post(`/approvals/${id}/${decision}`, { notes: notes || null })
+      const payload = { notes: notes || null }
+      if (entityType === 'loan' && interestRate) {
+        payload.interest_rate = parseFloat(interestRate)
+      }
+      await api.post(`/approvals/${id}/${decision}`, payload)
       showToast(`Request ${decision}d`)
       setExpandedId(null)
       setNotes('')
+      setInterestRate('')
       await loadApprovals()
     } catch (err) {
       showToast(err.response?.data?.detail || `Could not ${decision}`, 'error')
@@ -122,6 +132,20 @@ export default function Approvals() {
 
                   {a.status === 'pending' && (
                     <>
+                      {a.entity_type === 'loan' && (
+                        <div className="mb-3">
+                          <label className="block text-xs font-medium text-slate-500 mb-1">
+                            Interest rate (%) - required to approve
+                          </label>
+                          <input
+                            type="number" step="0.01" min="0.01"
+                            value={interestRate}
+                            onChange={(e) => setInterestRate(e.target.value)}
+                            placeholder="e.g. 7.5"
+                            className="w-32 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-crimson-600"
+                          />
+                        </div>
+                      )}
                       <textarea
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
@@ -131,14 +155,14 @@ export default function Approvals() {
                       />
                       <div className="flex gap-2">
                         <button
-                          onClick={() => handleDecision(a.id, 'approve')}
+                          onClick={() => handleDecision(a.id, 'approve', a.entity_type)}
                           disabled={processingId === a.id}
                           className="px-4 py-2 bg-steel-900 text-white rounded-lg text-sm font-medium hover:bg-steel-800 transition disabled:opacity-50"
                         >
                           {processingId === a.id ? 'Processing...' : 'Approve'}
                         </button>
                         <button
-                          onClick={() => handleDecision(a.id, 'reject')}
+                          onClick={() => handleDecision(a.id, 'reject', a.entity_type)}
                           disabled={processingId === a.id}
                           className="px-4 py-2 border border-crimson-600 text-crimson-600 rounded-lg text-sm font-medium hover:bg-crimson-100 transition disabled:opacity-50"
                         >

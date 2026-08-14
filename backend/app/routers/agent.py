@@ -8,6 +8,8 @@ from sqlalchemy import select
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.account_access import user_can_access_account
+from app.core.exchange_rates import convert as convert_currency
 from app.models.models import (
     User, AgentType, AgentMessageRole, AgentActionLog, AgentActionStatus, Account,
     Transaction, TransactionType, TransactionStatus, SavingsGoal,
@@ -53,11 +55,9 @@ async def confirm_agent_action(
 
     if action.tool_name == "transfer":
         data = json.loads(action.input)
-        from_result = await db.execute(
-            select(Account).where(Account.id == data["from_account_id"], Account.owner_id == current_user.id)
-        )
+        from_result = await db.execute(select(Account).where(Account.id == data["from_account_id"]))
         from_account = from_result.scalar_one_or_none()
-        if not from_account:
+        if not from_account or not await user_can_access_account(db, current_user.id, from_account.id):
             raise HTTPException(status_code=403, detail="Not your account")
 
         to_result = await db.execute(select(Account).where(Account.id == data["to_account_id"]))
@@ -70,18 +70,31 @@ async def confirm_agent_action(
             raise HTTPException(status_code=400, detail="Insufficient funds")
 
         group_id = str(uuid.uuid4())
+
+        exchange_rate = None
+        credit_amount = amount
+        if from_account.currency != to_account.currency:
+            try:
+                credit_amount, exchange_rate = await convert_currency(amount, from_account.currency, to_account.currency)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            except Exception:
+                raise HTTPException(status_code=503, detail="Exchange rate service is temporarily unavailable, please try again")
+
         from_account.balance -= amount
-        to_account.balance += amount
+        to_account.balance += credit_amount
 
         db.add(Transaction(
             account_id=from_account.id, type=TransactionType.transfer_debit,
             amount=amount, transfer_group_id=group_id,
             status=TransactionStatus.completed, initiated_by=current_user.id,
+            exchange_rate=exchange_rate,
         ))
         db.add(Transaction(
             account_id=to_account.id, type=TransactionType.transfer_credit,
-            amount=amount, transfer_group_id=group_id,
+            amount=credit_amount, transfer_group_id=group_id,
             status=TransactionStatus.completed, initiated_by=current_user.id,
+            exchange_rate=exchange_rate,
         ))
 
         action.status = AgentActionStatus.executed
@@ -164,6 +177,46 @@ async def confirm_agent_action(
         action.output = json.dumps({"goal_id": goal.id, "goal_account_id": goal_account.id})
         await db.commit()
         return {"status": "executed", "goal_account_nickname": goal_account.nickname}
+
+    if action.tool_name == "loan_repayment":
+        from app.models.models import Loan, LoanStatus, Account, TransactionType, TransactionStatus
+
+        data = json.loads(action.input)
+        loan_result = await db.execute(select(Loan).where(Loan.id == data["loan_id"]))
+        loan = loan_result.scalar_one_or_none()
+        if not loan or loan.client_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not your loan")
+        if loan.status != LoanStatus.active:
+            raise HTTPException(status_code=400, detail=f"This loan is {loan.status.value}, not active")
+
+        account_result = await db.execute(select(Account).where(Account.id == loan.disbursement_account_id))
+        account = account_result.scalar_one_or_none()
+        if not account:
+            raise HTTPException(status_code=400, detail="The linked account no longer exists")
+
+        amount = Decimal(data["amount"])
+        payment = min(amount, loan.remaining_balance)
+        if account.balance < payment:
+            raise HTTPException(status_code=400, detail="Insufficient funds for this payment")
+
+        account.balance -= payment
+        loan.remaining_balance -= payment
+
+        db.add(Transaction(
+            account_id=account.id, type=TransactionType.withdrawal,
+            amount=payment, status=TransactionStatus.completed,
+            initiated_by=current_user.id, source="Loan Repayment (via Assistant)",
+        ))
+
+        if loan.remaining_balance <= 0:
+            loan.remaining_balance = Decimal("0")
+            loan.status = LoanStatus.closed
+            loan.next_payment_due = None
+
+        action.status = AgentActionStatus.executed
+        action.output = json.dumps({"remaining_balance": str(loan.remaining_balance)})
+        await db.commit()
+        return {"status": "executed", "loan_repayment": True, "amount": str(payment), "remaining_balance": str(loan.remaining_balance)}
 
     raise HTTPException(status_code=400, detail="Unknown action type")
 

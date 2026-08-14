@@ -19,3 +19,4 @@ class ApprovalOut(BaseModel):
 
 class ApprovalActionRequest(BaseModel):
     notes: str | None = None
+    interest_rate: float | None = None  # required when approving a loan - the bank sets the rate

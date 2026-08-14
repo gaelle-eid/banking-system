@@ -1,6 +1,6 @@
 from pydantic_ai import Agent
 from app.agents.deps import ClientAgentDeps
-from app.agents.tools.client_tools import get_my_accounts, get_balance_in_currency, get_transaction_history, explain_faq, propose_transfer, find_recipient_account, get_recent_recipients, recommend_card_tier, propose_phone_transfer, confirm_phone_transfer_otp, analyze_spending, propose_savings_goal, contribute_to_goal, set_goal_savings_plan
+from app.agents.tools.client_tools import get_my_accounts, get_balance_in_currency, get_transaction_history, explain_faq, propose_transfer, find_recipient_account, get_recent_recipients, recommend_card_tier, propose_phone_transfer, confirm_phone_transfer_otp, analyze_spending, propose_savings_goal, contribute_to_goal, set_goal_savings_plan, get_my_loans, propose_loan_payment, get_account_statement
 
 
 client_agent = Agent(
@@ -53,7 +53,19 @@ client_agent = Agent(
         "they choose the amount themselves. This takes effect immediately - "
         "no separate confirmation needed, unlike transfers. Proactively "
         "offer this after creating a goal (e.g. 'want me to auto-save X "
-        "each month for this, or would you rather decide month to month?')."
+        "each month for this, or would you rather decide month to month?'). "
+        "For loans, use get_my_loans to check status, remaining balance, "
+        "monthly payment, and next due date. To make an extra/early payment "
+        "toward an active loan, use propose_loan_payment - this proposes a "
+        "payment the client must confirm, same as a transfer, since it moves "
+        "money out of their account. If they have more than one active loan, "
+        "check get_my_loans first and ask which one they mean. "
+        "For statements, use get_account_statement whenever the client wants "
+        "a statement or asks to download one as a PDF - this generates a "
+        "fresh snapshot and returns a Statement ID at the end of the "
+        "response. ALWAYS include that exact 'Statement ID: <id>' line "
+        "verbatim in your reply, even though it looks technical - the app "
+        "uses it to show a Download PDF button, and won't work without it."
     ),
 )
 
@@ -71,3 +83,6 @@ client_agent.tool(analyze_spending)
 client_agent.tool(propose_savings_goal)
 client_agent.tool(contribute_to_goal)
 client_agent.tool(set_goal_savings_plan)
+client_agent.tool(get_my_loans)
+client_agent.tool(propose_loan_payment)
+client_agent.tool(get_account_statement)

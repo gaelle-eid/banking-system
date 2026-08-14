@@ -15,6 +15,13 @@ class SavingsGoalOut(BaseModel):
     fixed_monthly_amount: Decimal | None
     active: bool
     created_at: datetime
+    currency: str = "USD"
 
     class Config:
         from_attributes = True
+
+
+class SavingsGoalCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    target_amount: Decimal = Field(gt=0)
+    source_account_id: str

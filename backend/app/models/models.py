@@ -198,13 +198,19 @@ class Loan(Base):
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     client_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
     amount = Column(Numeric(14, 2), nullable=False)
-    interest_rate = Column(Numeric(5, 2), nullable=False)
+    interest_rate = Column(Numeric(5, 2), nullable=True)  # set by the bank at approval, not the client
     term_months = Column(Numeric, nullable=False)
+    purpose = Column(String, nullable=True)
+    disbursement_account_id = Column(UUID(as_uuid=False), ForeignKey("accounts.id"), nullable=True)
+    disbursed_at = Column(DateTime, nullable=True)
+    total_repayment = Column(Numeric(14, 2), nullable=True)  # principal + simple interest, set at approval
+    monthly_payment = Column(Numeric(14, 2), nullable=True)
+    remaining_balance = Column(Numeric(14, 2), nullable=True)
+    next_payment_due = Column(DateTime, nullable=True)
     status = Column(Enum(LoanStatus), default=LoanStatus.pending)
     approved_by = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-
-
+    
 class Card(Base):
     __tablename__ = "cards"
 
@@ -225,8 +231,13 @@ class Statement(Base):
     account_id = Column(UUID(as_uuid=False), ForeignKey("accounts.id"), nullable=False)
     period_start = Column(DateTime, nullable=False)
     period_end = Column(DateTime, nullable=False)
+    opening_balance = Column(Numeric(14, 2), nullable=True)
+    closing_balance = Column(Numeric(14, 2), nullable=True)
+    total_deposits = Column(Numeric(14, 2), nullable=True)
+    total_withdrawals = Column(Numeric(14, 2), nullable=True)
+    currency = Column(String, nullable=True)
+    transactions_snapshot = Column(JSON, nullable=True)  # frozen list of transaction lines at generation time
     generated_at = Column(DateTime, default=datetime.utcnow)
-
 
 # ---------- Governance ----------
 

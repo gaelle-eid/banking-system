@@ -720,7 +720,114 @@ async def set_goal_savings_plan(
             f"Done - '{goal.name}' will now auto-save {fixed_monthly_amount} on the 1st of each month, "
             f"moved automatically from its funding account. No action needed on your end each month."
         )
+    
     return (
         f"Done - '{goal.name}' is now on a variable plan. You'll get a reminder on the 1st of each month "
         f"and can tell me how much to contribute that month."
+    )
+
+async def get_account_statement(
+    ctx: RunContext[ClientAgentDeps],
+    account_type: str | None = None,
+    account_nickname: str | None = None,
+) -> str:
+    """Generate (or pull the most recent) statement for one of the
+    client's accounts and make it downloadable. Use this whenever the
+    client wants a statement, wants to download their statement as a
+    PDF, or asks about their statement history. This creates a fresh
+    snapshot covering the current month to date - it does NOT need
+    separate confirmation, since it doesn't move any money."""
+    from app.models.models import Statement
+    from app.routers.statements import _generate_statement_for_account
+
+    account, err = await _resolve_own_account(ctx, account_type, account_nickname)
+    if err:
+        return err
+
+    statement = await _generate_statement_for_account(ctx.deps.db, account)
+
+    period = f"{statement.period_start.strftime('%b %d')} - {statement.period_end.strftime('%b %d, %Y')}"
+    return (
+        f"Here's your statement for {account.nickname} ({period}):\n"
+        f"Opening balance: {statement.opening_balance} {statement.currency}\n"
+        f"Closing balance: {statement.closing_balance} {statement.currency}\n"
+        f"Total deposits: {statement.total_deposits} {statement.currency}\n"
+        f"Total withdrawals: {statement.total_withdrawals} {statement.currency}\n\n"
+        f"Statement ID: {statement.id}"
+    )
+
+async def get_my_loans(ctx: RunContext[ClientAgentDeps]) -> str:
+    """Check the client's loans - status, remaining balance, monthly
+    payment, and next payment due date. Use this whenever the client asks
+    about a loan, how much they still owe, or when their next payment is."""
+    from app.models.models import Loan, Account
+
+    result = await ctx.deps.db.execute(select(Loan).where(Loan.client_id == ctx.deps.user_id))
+    loans = result.scalars().all()
+    if not loans:
+        return "You don't have any loans."
+
+    lines = []
+    for loan in loans:
+        currency = "USD"
+        if loan.disbursement_account_id:
+            acc_result = await ctx.deps.db.execute(select(Account).where(Account.id == loan.disbursement_account_id))
+            acc = acc_result.scalar_one_or_none()
+            if acc:
+                currency = acc.currency
+
+        if loan.status.value == "pending":
+            lines.append(f"{loan.amount} {currency} loan ({loan.purpose or 'no purpose given'}) - pending review, rate not yet set.")
+        elif loan.status.value == "rejected":
+            lines.append(f"{loan.amount} {currency} loan - rejected.")
+        elif loan.status.value == "active":
+            due = loan.next_payment_due.strftime("%b %d, %Y") if loan.next_payment_due else "unknown"
+            lines.append(
+                f"{loan.amount} {currency} loan at {loan.interest_rate}% - {loan.remaining_balance} {currency} remaining, "
+                f"{loan.monthly_payment} {currency}/month, next payment due {due}."
+            )
+        elif loan.status.value == "closed":
+            lines.append(f"{loan.amount} {currency} loan - paid off in full.")
+
+    return "\n".join(lines)
+
+
+async def propose_loan_payment(
+    ctx: RunContext[ClientAgentDeps],
+    amount: float,
+    loan_index: int = 1,
+) -> str:
+    """Propose an extra/early payment toward one of the client's active
+    loans, on top of their regular auto-debited monthly payment. Use
+    get_my_loans first if the client has more than one loan so you can
+    ask which one they mean; loan_index is 1 for their first/only loan,
+    2 for the second, etc., in the order get_my_loans lists them. This
+    does NOT execute immediately - the client must confirm."""
+    from app.models.models import Loan, LoanStatus
+
+    result = await ctx.deps.db.execute(
+        select(Loan).where(Loan.client_id == ctx.deps.user_id, Loan.status == LoanStatus.active)
+    )
+    active_loans = result.scalars().all()
+    if not active_loans:
+        return "You don't have any active loans to pay toward."
+    if loan_index < 1 or loan_index > len(active_loans):
+        return f"You have {len(active_loans)} active loan(s). Please pick a valid one."
+
+    loan = active_loans[loan_index - 1]
+    if amount > float(loan.remaining_balance):
+        return f"That's more than the remaining balance of {loan.remaining_balance} - the max payment right now is {loan.remaining_balance}."
+
+    action = AgentActionLog(
+        conversation_id=ctx.deps.conversation_id,
+        tool_name="loan_repayment",
+        input=json.dumps({"loan_id": loan.id, "amount": str(amount)}),
+        status=AgentActionStatus.pending_approval,
+    )
+    ctx.deps.db.add(action)
+    await ctx.deps.db.flush()
+
+    return (
+        f"I've prepared a payment of {amount} toward your loan (remaining balance {loan.remaining_balance}). "
+        f"This hasn't been executed yet - please confirm using action id {action.id}."
     )
