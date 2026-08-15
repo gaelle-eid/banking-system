@@ -33,6 +33,9 @@ class CardTierDetail(BaseModel):
     rewards: str
     foreign_fee: str
     perks: str
+    non_cash_perks: list[str] = []
+    benefits: list[str] = []
+    non_cash_perks: list[str] = []
 
 
 class CardTierInfoOut(BaseModel):

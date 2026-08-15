@@ -22,6 +22,11 @@ export default function AccountCard({ account }) {
             <span className="text-xs uppercase tracking-wide text-stone-300">
               {account.nickname || account.type}
             </span>
+            {account.nickname && (
+              <span className="text-[10px] uppercase tracking-wide text-stone-300/70">
+                · {account.type}
+              </span>
+            )}
             {account.is_joint && (
               <span className="text-[10px] uppercase tracking-wide bg-white/15 text-white px-2 py-0.5 rounded-full">
                 Joint

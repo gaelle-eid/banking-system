@@ -14,6 +14,7 @@ NEW_FUNDING_SOURCE_WINDOW_HOURS = 24
 MAX_CASH_BACK_PER_TRANSACTION = Decimal("100")
 NEW_RECIPIENT_PHONE_TRANSFER_CAP = Decimal("200")
 MAX_OTP_ATTEMPTS = 3
+MAX_EXTERNAL_WALLET_WITHDRAWAL = Decimal("1000")
 
 # ATM daily cash limits vary by card tier, matching how real banks tie
 # withdrawal limits to account/card tier.

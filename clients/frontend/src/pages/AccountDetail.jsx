@@ -26,6 +26,8 @@ export default function AccountDetail() {
   const [debitCards, setDebitCards] = useState([])
   const [hasUnactivatedCard, setHasUnactivatedCard] = useState(false)
   const [withdrawCardId, setWithdrawCardId] = useState('')
+  const [withdrawWalletProvider, setWithdrawWalletProvider] = useState('Whish Money')
+  const [withdrawWalletPhone, setWithdrawWalletPhone] = useState('')
   const [transferAmount, setTransferAmount] = useState('')
   const [transferTo, setTransferTo] = useState('')
   const [conversionPreview, setConversionPreview] = useState(null)
@@ -116,8 +118,11 @@ export default function AccountDetail() {
         method: withdrawMethod,
         card_id: withdrawMethod === 'atm' ? withdrawCardId : undefined,
         category: withdrawCategory || undefined,
+        wallet_provider: withdrawMethod === 'external_wallet' ? withdrawWalletProvider : undefined,
+        wallet_phone: withdrawMethod === 'external_wallet' ? withdrawWalletPhone : undefined,
       })
       setWithdrawAmount('')
+      setWithdrawWalletPhone('')
       await loadData()
       showToast('Withdrawal successful')
     } catch (err) {
@@ -187,6 +192,11 @@ export default function AccountDetail() {
         <div className="relative">
           <div className="flex items-center gap-2">
             <span className="text-xs uppercase tracking-wide text-stone-300">{account.nickname || account.type}</span>
+            {account.nickname && (
+              <span className="text-[10px] uppercase tracking-wide text-stone-300/70">
+                · {account.type}
+              </span>
+            )}
             {account.is_joint && (
               <span className="text-[10px] uppercase tracking-wide bg-white/15 text-white px-2 py-0.5 rounded-full">
                 Joint
@@ -295,6 +305,7 @@ export default function AccountDetail() {
             <option value="atm">ATM (Debit Card)</option>
             <option value="branch_teller">Branch Teller</option>
             <option value="cash_back">Cash Back at Checkout</option>
+            <option value="external_wallet">External Wallet (Whish Money, etc.)</option>
           </select>
           {withdrawMethod === 'atm' && (
             debitCards.length === 0 ? (
@@ -318,6 +329,28 @@ export default function AccountDetail() {
                 ))}
               </select>
             )
+          )}
+          {withdrawMethod === 'external_wallet' && (
+            <div className="mb-2 space-y-2">
+              <select
+                value={withdrawWalletProvider} onChange={(e) => setWithdrawWalletProvider(e.target.value)}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              >
+                <option value="Whish Money">Whish Money</option>
+                <option value="OMT">OMT</option>
+                <option value="Other Wallet">Other Wallet</option>
+              </select>
+              <input
+                type="tel" required
+                value={withdrawWalletPhone}
+                onChange={(e) => setWithdrawWalletPhone(e.target.value)}
+                placeholder="Recipient wallet phone number"
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+              <p className="text-xs text-stone-500">
+                Cash is sent to this phone number's wallet, up to {'$1,000'} per transaction.
+              </p>
+            </div>
           )}
           <input
             type="number" step="0.01" min="0.01" required

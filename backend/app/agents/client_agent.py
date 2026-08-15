@@ -1,6 +1,6 @@
 from pydantic_ai import Agent
 from app.agents.deps import ClientAgentDeps
-from app.agents.tools.client_tools import get_my_accounts, get_balance_in_currency, get_transaction_history, explain_faq, propose_transfer, find_recipient_account, get_recent_recipients, recommend_card_tier, propose_phone_transfer, confirm_phone_transfer_otp, analyze_spending, propose_savings_goal, contribute_to_goal, set_goal_savings_plan, get_my_loans, propose_loan_payment, get_account_statement
+from app.agents.tools.client_tools import get_my_accounts, get_balance_in_currency, get_transaction_history, explain_faq, propose_transfer, find_recipient_account, get_recent_recipients, recommend_card_tier, propose_card_request, propose_phone_transfer, confirm_phone_transfer_otp, analyze_spending, propose_savings_goal, contribute_to_goal, set_goal_savings_plan, get_my_loans, propose_loan_payment, get_account_statement
 
 
 client_agent = Agent(
@@ -92,10 +92,19 @@ client_agent = Agent(
         "large withdrawal/transfer/loan payment would leave very little "
         "buffer, say so plainly and suggest a more realistic alternative, "
         "the way a good advisor would rather than just agreeing to "
-        "whatever's asked."
+        "whatever's asked. "
+        "\n\n"
+        "For cards, recommend_card_tier gives a recommendation with an "
+        "explicit comparison against an alternative tier, grounded in "
+        "real spending categories. If the client agrees to request a "
+        "card at a specific tier (recommended or one they name "
+        "themselves), use propose_card_request - never claim there's no "
+        "way to submit a request or describe app menu steps, since this "
+        "tool does it directly. This creates a pending action the client "
+        "must confirm, same as a transfer. Requested cards still need "
+        "employee approval before they're active, same as the app."
     ),
 )
-
 client_agent.tool(get_my_accounts)
 client_agent.tool(get_balance_in_currency)
 client_agent.tool(get_transaction_history)
@@ -104,6 +113,7 @@ client_agent.tool(propose_transfer)
 client_agent.tool(find_recipient_account)
 client_agent.tool(get_recent_recipients)
 client_agent.tool(recommend_card_tier)
+client_agent.tool(propose_card_request)
 client_agent.tool(propose_phone_transfer)
 client_agent.tool(confirm_phone_transfer_otp)
 client_agent.tool(analyze_spending)

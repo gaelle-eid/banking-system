@@ -90,24 +90,42 @@ async def get_tier_info():
             "rewards": "No rewards",
             "foreign_fee": "3%",
             "perks": "No annual fee. Solid everyday card with no frills.",
+            "non_cash_perks": [],
         },
         "cashback": {
             "annual_fee": Decimal("0"),
             "rewards": "2% cashback on purchases",
             "foreign_fee": "3%",
             "perks": "Earn cashback on purchases, higher ATM limit than Standard.",
+            "non_cash_perks": [
+                "Free coffee at partner cafes (1x/week)",
+                "10% off at partner grocery stores",
+            ],
         },
         "travel": {
             "annual_fee": Decimal("95"),
             "rewards": "3x points on travel purchases",
             "foreign_fee": "0%",
             "perks": "No foreign transaction fees, travel rewards, higher ATM limit.",
+            "non_cash_perks": [
+                "Free breakfast at partner hotels",
+                "15% off dining at partner restaurants",
+                "Airport lounge access (2x/year)",
+                "Travel insurance included",
+            ],
         },
         "premium": {
             "annual_fee": Decimal("250"),
             "rewards": "5% cashback + travel perks",
             "foreign_fee": "0%",
             "perks": "Highest ATM limit, airport lounge access, dedicated support line.",
+            "non_cash_perks": [
+                "Free breakfast AND dinner at partner hotels/restaurants",
+                "Unlimited airport lounge access",
+                "24/7 concierge service",
+                "Comprehensive travel insurance",
+                "Priority customer support line",
+            ],
         },
     }
     return CardTierInfoOut(**{

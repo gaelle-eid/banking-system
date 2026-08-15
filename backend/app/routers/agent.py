@@ -222,6 +222,55 @@ async def confirm_agent_action(
         await db.commit()
         return {"status": "executed", "loan_repayment": True, "amount": str(payment), "remaining_balance": str(loan.remaining_balance)}
 
+    if action.tool_name == "card_request":
+        from app.models.models import Card, CardType, CardTier, CardStatus, Approval, ApprovalEntityType, ApprovalStatus
+
+        data = json.loads(action.input)
+        account_result = await db.execute(select(Account).where(Account.id == data["account_id"]))
+        account = account_result.scalar_one_or_none()
+        if not account or account.owner_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not your account")
+
+        card_type = CardType(data["card_type"])
+        tier = CardTier(data["tier"])
+
+        if card_type == CardType.debit:
+            existing_result = await db.execute(
+                select(Card).where(
+                    Card.account_id == account.id,
+                    Card.type == CardType.debit,
+                    Card.status.in_([CardStatus.pending, CardStatus.active]),
+                )
+            )
+            if existing_result.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="This account already has a debit card (active or pending)")
+
+        from datetime import datetime, timedelta
+        from app.routers.cards import generate_masked_number
+        card = Card(
+            account_id=account.id,
+            masked_number=generate_masked_number(),
+            type=card_type,
+            tier=tier,
+            status=CardStatus.pending,
+            expiry_date=datetime.utcnow() + timedelta(days=365 * 3),
+        )
+        db.add(card)
+        await db.flush()
+
+        approval = Approval(
+            entity_type=ApprovalEntityType.card,
+            entity_id=card.id,
+            requested_by=current_user.id,
+            status=ApprovalStatus.pending,
+        )
+        db.add(approval)
+
+        action.status = AgentActionStatus.executed
+        action.output = json.dumps({"card_id": card.id})
+        await db.commit()
+        return {"status": "executed", "card_request": True, "tier": tier.value, "card_type": card_type.value}
+
     raise HTTPException(status_code=400, detail="Unknown action type")
 
 

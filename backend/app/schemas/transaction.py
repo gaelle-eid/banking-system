@@ -13,9 +13,11 @@ class DepositRequest(BaseModel):
 class WithdrawalRequest(BaseModel):
     account_id: str
     amount: Decimal = Field(gt=0)
-    method: str  # "atm" / "branch_teller" / "cash_back"
+    method: str  # "atm" / "branch_teller" / "cash_back" / "external_wallet"
     card_id: str | None = None  # required when method is "atm"
     category: TransactionCategory | None = None
+    wallet_provider: str | None = None  # required when method is "external_wallet", e.g. "Whish Money"
+    wallet_phone: str | None = None  # required when method is "external_wallet"
 
 
 class TransferRequest(BaseModel):

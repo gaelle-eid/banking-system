@@ -322,11 +322,16 @@ async def get_recent_recipients(ctx: RunContext[ClientAgentDeps]) -> str:
         return "You haven't sent money to anyone else yet."
     return "People you've sent money to before:\n" + "\n".join(seen.values())
 
-
 async def recommend_card_tier(ctx: RunContext[ClientAgentDeps]) -> str:
-    """Analyze the client's transaction history and recommend a card tier
-    (standard, cashback, travel, or premium) with reasoning based on their
-    spending patterns and account balances."""
+    """Analyze the client's REAL spending by category (last 30 days) plus
+    their balance, and recommend a card tier (standard, cashback, travel,
+    or premium) with reasoning grounded in what they actually spend on -
+    not just a transaction count. Explicitly compares the recommended
+    tier's benefits against the next most relevant alternative, so the
+    client understands what they'd gain versus what they'd be leaving on
+    the table with a different tier."""
+    from datetime import datetime, timedelta
+
     accounts = await get_accessible_accounts(ctx.deps.db, ctx.deps.user_id)
     if not accounts:
         return "You need at least one account before I can recommend a card."
@@ -334,49 +339,136 @@ async def recommend_card_tier(ctx: RunContext[ClientAgentDeps]) -> str:
     total_balance = sum(float(a.balance) for a in accounts)
     account_ids = [a.id for a in accounts]
 
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
     tx_result = await ctx.deps.db.execute(
-        select(Transaction).where(Transaction.account_id.in_(account_ids))
+        select(Transaction).where(
+            Transaction.account_id.in_(account_ids),
+            Transaction.created_at >= thirty_days_ago,
+        )
     )
     txs = tx_result.scalars().all()
 
-    total_outgoing = sum(float(t.amount) for t in txs if t.type.value in ("withdrawal", "transfer_debit"))
-    transfer_count = sum(1 for t in txs if t.type.value in ("transfer_debit", "transfer_credit"))
+    outgoing_txs = [t for t in txs if t.type.value in ("withdrawal", "transfer_debit")]
+    total_outgoing = sum(float(t.amount) for t in outgoing_txs)
     tx_count = len(txs)
 
-    # Simple, explainable heuristic (no real merchant-category data available yet)
+    category_totals = {}
+    for t in outgoing_txs:
+        if t.category:
+            cat = t.category.value
+            category_totals[cat] = category_totals.get(cat, 0.0) + float(t.amount)
+
+    top_cat, top_amt = (None, 0.0)
+    if category_totals:
+        top_cat, top_amt = max(category_totals.items(), key=lambda c: c[1])
+    top_label = top_cat.replace("_", " ").title() if top_cat else None
+    top_pct = (top_amt / total_outgoing * 100) if total_outgoing else 0
+
+    category_summary = ""
+    if category_totals:
+        sorted_cats = sorted(category_totals.items(), key=lambda c: c[1], reverse=True)[:3]
+        category_summary = "Your top spending (last 30 days): " + ", ".join(
+            f"{c.replace('_', ' ').title()} ({a:.2f})" for c, a in sorted_cats
+        ) + ". "
+
+    # Compact benefit summaries per tier, used to build an explicit
+    # this-tier-vs-that-tier comparison rather than describing the
+    # recommended tier in isolation.
+    TIER_BENEFITS = {
+        "standard": "no annual fee, but no rewards and no extra perks",
+        "cashback": "2% cashback on every purchase, no annual fee, but nothing travel-specific",
+        "travel": "no foreign transaction fees, 3x points on travel, free hotel breakfast, airport lounge access, travel insurance ($95/year)",
+        "premium": "5% cashback plus full travel perks - free breakfast AND dinner, unlimited lounge access, 24/7 concierge ($250/year)",
+    }
+
     if total_balance >= 5000 and total_outgoing >= 2000:
-        tier = "premium"
+        tier, alt = "premium", "travel"
         reason = (
-            f"You maintain a strong balance (~${total_balance:.0f}) and move significant money "
-            f"(~${total_outgoing:.0f} in withdrawals/transfers). A Premium card offers the highest "
-            f"limits and best perks for that level of activity."
+            f"{category_summary}You maintain a strong balance (~${total_balance:.0f}) and spend "
+            f"significantly (~${total_outgoing:.0f}/month)."
         )
-    elif transfer_count >= 5:
-        tier = "travel"
-        reason = (
-            f"You've made {transfer_count} transfers, suggesting frequent movement of money "
-            f"(possibly across accounts or to others). A Travel card rewards this kind of "
-            f"active, flexible spending with travel-related perks."
-        )
+    elif top_cat == "travel":
+        tier, alt = "travel", "cashback"
+        reason = f"{category_summary}Travel is your biggest category at {top_pct:.0f}% of spending."
+    elif top_cat in ("dining", "shopping", "entertainment"):
+        tier, alt = "cashback", "travel"
+        reason = f"{category_summary}{top_label} is your biggest category at {top_pct:.0f}% of spending."
     elif tx_count >= 5:
-        tier = "cashback"
-        reason = (
-            f"You have {tx_count} transactions on record - regular, everyday activity. "
-            f"A Cashback card rewards frequent spending with a percentage back on every purchase."
-        )
+        tier, alt = "cashback", "standard"
+        reason = f"{category_summary}You have {tx_count} transactions in the last 30 days - regular, everyday activity."
     else:
-        tier = "standard"
-        reason = (
-            "You don't have much transaction history yet. A Standard card is a solid starting "
-            "point with no annual fee - I can suggest an upgrade once I see more activity."
-        )
+        tier, alt = "standard", "cashback"
+        reason = "You don't have much recent transaction history yet."
+
+    comparison = (
+        f"With **{tier.capitalize()}**, you get: {TIER_BENEFITS[tier]}. "
+        f"Compare that to **{alt.capitalize()}**, which gives you: {TIER_BENEFITS[alt]}. "
+        f"Given your spending, {tier.capitalize()} puts more real value in your pocket than {alt.capitalize()} would."
+    )
 
     return (
-        f"Based on your activity, I'd recommend a **{tier.capitalize()} card**.\n\n{reason}\n\n"
+        f"Based on your real spending, I'd recommend a **{tier.capitalize()} card**.\n\n{reason}\n\n"
+        f"{comparison}\n\n"
         f"Want me to prepare a card request for you at this tier?"
     )
 
 
+async def propose_card_request(
+    ctx: RunContext[ClientAgentDeps],
+    account_type: str | None = None,
+    account_nickname: str | None = None,
+    card_type: str = "debit",
+    tier: str = "standard",
+) -> str:
+    """Propose requesting a new card (debit or credit) at a given tier for
+    one of the client's accounts. Only call this after the client has
+    explicitly agreed to a specific tier - either one you recommended via
+    recommend_card_tier, or one they named themselves. card_type must be
+    'debit' or 'credit'; tier must be 'standard', 'cashback', 'travel', or
+    'premium'. This creates a pending action the client must confirm -
+    it does NOT create the card immediately. Requested cards still need
+    employee approval before they're active, same as requesting one
+    through the app directly."""
+    from app.models.models import Card, CardType, CardStatus
+
+    account, err = await _resolve_own_account(ctx, account_type, account_nickname)
+    if err:
+        return err
+
+    if card_type not in ("debit", "credit"):
+        return "Card type should be 'debit' or 'credit'."
+    if tier not in ("standard", "cashback", "travel", "premium"):
+        return "Tier should be one of: standard, cashback, travel, premium."
+
+    if card_type == "debit":
+        existing_result = await ctx.deps.db.execute(
+            select(Card).where(
+                Card.account_id == account.id,
+                Card.type == CardType.debit,
+                Card.status.in_([CardStatus.pending, CardStatus.active]),
+            )
+        )
+        if existing_result.scalar_one_or_none():
+            return f"{account.nickname} already has a debit card (active or pending) - only one is allowed per account."
+
+    action = AgentActionLog(
+        conversation_id=ctx.deps.conversation_id,
+        tool_name="card_request",
+        input=json.dumps({
+            "account_id": account.id,
+            "card_type": card_type,
+            "tier": tier,
+        }),
+        status=AgentActionStatus.pending_approval,
+    )
+    ctx.deps.db.add(action)
+    await ctx.deps.db.flush()
+
+    return (
+        f"I've prepared a {tier} {card_type} card request for {account.nickname}. Like all card "
+        f"requests, it'll need employee approval before it's active - same as requesting one "
+        f"directly in the app. This hasn't been submitted yet - please confirm using action id {action.id}."
+    )
 
 async def propose_phone_transfer(
     ctx: RunContext[ClientAgentDeps],
@@ -990,5 +1082,3 @@ async def propose_loan_payment(
         f"I've prepared a payment of {amount} toward your loan (remaining balance {loan.remaining_balance}). "
         f"This hasn't been executed yet - please confirm using action id {action.id}."
     )
-
-

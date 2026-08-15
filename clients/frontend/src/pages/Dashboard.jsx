@@ -5,6 +5,8 @@ import Layout from '../components/Layout'
 import AccountCard from '../components/AccountCard'
 import { formatMoney, formatDate } from '../lib/format'
 import SpendingChart from '../components/SpendingChart'
+import CategoryBreakdownChart from '../components/CategoryBreakdownChart'
+import UpcomingPayments from '../components/UpcomingPayments'
 import JointInvitations from '../components/JointInvitations'
 import { useAuth } from '../context/AuthContext'
 
@@ -17,6 +19,7 @@ const quickActions = [
 export default function Dashboard() {
   const [accounts, setAccounts] = useState([])
   const [recentActivity, setRecentActivity] = useState([])
+  const [categorySpending, setCategorySpending] = useState(null)
   const [loading, setLoading] = useState(true)
 const [creating, setCreating] = useState(false)
   const [showAddAccount, setShowAddAccount] = useState(false)
@@ -39,6 +42,14 @@ const txResults = await Promise.all(
     )
     const merged = txResults.flat().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 8)
     setRecentActivity(merged)
+
+    try {
+      const catRes = await api.get('/transactions/spending/by-category', { params: { days: 30 } })
+      setCategorySpending(catRes.data)
+    } catch {
+      setCategorySpending(null)
+    }
+
     setLoading(false)
   }
 
@@ -148,6 +159,11 @@ const activeAccounts = accounts.filter((a) => a.status === 'active')
                 <option value="checking">Checking</option>
                 <option value="savings">Savings</option>
               </select>
+              <p className="text-xs text-stone-500 mt-1">
+                {newAccountType === 'checking'
+                  ? 'For everyday spending, transfers, and cards.'
+                  : 'For setting money aside - pair with a savings goal for auto-contributions.'}
+              </p>
             </div>
             <div>
               <label className="block text-xs font-medium text-stone-500 mb-1">Currency</label>
@@ -238,6 +254,20 @@ const activeAccounts = accounts.filter((a) => a.status === 'active')
           <SpendingChart transactions={recentActivity} />
         </div>
       )}
+
+      {/* Spending by category */}
+      {!loading && (
+        <div className="mb-8">
+          <h2 className="font-display text-lg font-semibold text-ink-950 mb-4">Spending by category</h2>
+          <CategoryBreakdownChart data={categorySpending} currency={currency} />
+        </div>
+      )}
+
+      {/* Upcoming payments */}
+      <div className="mb-8">
+        <h2 className="font-display text-lg font-semibold text-ink-950 mb-4">Upcoming payments</h2>
+        <UpcomingPayments />
+      </div>
 
       {/* Activity feed */}
       <h2 className="font-display text-lg font-semibold text-ink-950 mb-4">Recent activity</h2>

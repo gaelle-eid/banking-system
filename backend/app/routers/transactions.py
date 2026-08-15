@@ -1,5 +1,6 @@
 import uuid
 import random
+import re
 from decimal import Decimal
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,7 +10,7 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.email import send_transaction_email
-from app.core.limits import check_transaction_limits, check_deposit_source_limit, check_atm_withdrawal_limit, MAX_CASH_BACK_PER_TRANSACTION, is_new_phone_recipient, check_new_recipient_transfer_limit, MAX_OTP_ATTEMPTS
+from app.core.limits import check_transaction_limits, check_deposit_source_limit, check_atm_withdrawal_limit, MAX_CASH_BACK_PER_TRANSACTION, MAX_EXTERNAL_WALLET_WITHDRAWAL, is_new_phone_recipient, check_new_recipient_transfer_limit, MAX_OTP_ATTEMPTS
 from app.core.fraud_detection import check_transaction_for_fraud
 from app.core.account_access import get_accessible_account_ids, user_can_access_account
 from app.core.exchange_rates import convert as convert_currency
@@ -99,7 +100,7 @@ async def withdraw(
     if account.balance < payload.amount:
         raise HTTPException(status_code=400, detail="Insufficient funds")
 
-    if payload.method not in ("atm", "branch_teller", "cash_back"):
+    if payload.method not in ("atm", "branch_teller", "cash_back", "external_wallet"):
         raise HTTPException(status_code=400, detail="Invalid withdrawal method")
 
     method_label = None
@@ -125,6 +126,19 @@ async def withdraw(
         if payload.amount > MAX_CASH_BACK_PER_TRANSACTION:
             raise HTTPException(status_code=400, detail=f"Cash back is limited to {MAX_CASH_BACK_PER_TRANSACTION} per transaction")
         method_label = "Cash Back at Checkout"
+    elif payload.method == "external_wallet":
+        if not payload.wallet_phone:
+            raise HTTPException(status_code=400, detail="A wallet phone number is required for external wallet withdrawals")
+        cleaned_phone = re.sub(r"[\s\-()]", "", payload.wallet_phone)
+        if not re.match(r"^\+?\d{7,15}$", cleaned_phone):
+            raise HTTPException(status_code=400, detail="Wallet phone number must be 7-15 digits, optionally starting with +")
+        if payload.amount > MAX_EXTERNAL_WALLET_WITHDRAWAL:
+            raise HTTPException(
+                status_code=400,
+                detail=f"External wallet withdrawals are limited to {MAX_EXTERNAL_WALLET_WITHDRAWAL} per transaction",
+            )
+        provider = payload.wallet_provider or "Whish Money"
+        method_label = f"{provider} Wallet - ••••{cleaned_phone[-4:]}"
 
     try:
         await check_transaction_limits(db, account, payload.amount, is_outgoing=True)

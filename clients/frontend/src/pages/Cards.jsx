@@ -169,6 +169,13 @@ export default function Cards() {
                   {tierInfo[cardTier].perks} ATM limit: ${Number(tierInfo[cardTier].atm_daily_limit).toFixed(0)}/day.
                 </p>
               )}
+              {tierInfo && tierInfo[cardTier].non_cash_perks?.length > 0 && (
+                <ul className="text-xs text-stone-500 mt-1 list-disc list-inside space-y-0.5">
+                  {tierInfo[cardTier].non_cash_perks.map((perk) => (
+                    <li key={perk}>{perk}</li>
+                  ))}
+                </ul>
+              )}
               <button
                 type="button"
                 onClick={() => setShowCompare(!showCompare)}
@@ -211,6 +218,22 @@ export default function Cards() {
                         <td className="py-1.5 px-2 text-stone-500">Foreign fee</td>
                         {['standard', 'cashback', 'travel', 'premium'].map((t) => (
                           <td key={t} className="py-1.5 px-2">{tierInfo[t].foreign_fee}</td>
+                        ))}
+                      </tr>
+                      <tr className="border-t border-stone-300/40">
+                        <td className="py-1.5 px-2 text-stone-500 align-top">Non-cash perks</td>
+                        {['standard', 'cashback', 'travel', 'premium'].map((t) => (
+                          <td key={t} className="py-1.5 px-2 align-top">
+                            {tierInfo[t].non_cash_perks?.length > 0 ? (
+                              <ul className="list-disc list-inside space-y-0.5">
+                                {tierInfo[t].non_cash_perks.map((perk) => (
+                                  <li key={perk}>{perk}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <span className="text-stone-400">—</span>
+                            )}
+                          </td>
                         ))}
                       </tr>
                     </tbody>
@@ -265,7 +288,16 @@ export default function Cards() {
                 )}
                 <p className="text-xs text-stone-300 mb-3">Expires {formatDate(card.expiry_date)}</p>
                 {tierInfo && tierInfo[card.tier] && (
-                  <p className="text-[11px] text-stone-300 mb-3">{tierInfo[card.tier].perks}</p>
+                  <p className={`text-[11px] text-stone-300 ${tierInfo[card.tier]?.non_cash_perks?.length > 0 ? 'mb-1' : 'mb-3'}`}>
+                    {tierInfo[card.tier].perks}
+                  </p>
+                )}
+                {tierInfo && tierInfo[card.tier]?.non_cash_perks?.length > 0 && (
+                  <ul className="text-[11px] text-stone-300 mb-3 list-disc list-inside space-y-0.5">
+                    {tierInfo[card.tier].non_cash_perks.map((perk) => (
+                      <li key={perk}>{perk}</li>
+                    ))}
+                  </ul>
                 )}
                 {card.status === 'active' && !card.activated_at && (
                   <div className="mb-1">

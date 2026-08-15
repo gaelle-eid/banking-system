@@ -69,7 +69,10 @@ export default function Assistant() {
       let confirmMessage = 'Transfer confirmed and completed.'
       if (res.data.goal_account_nickname) {
         confirmMessage = `Savings goal "${res.data.goal_account_nickname}" created successfully.`
+      } else if (res.data.card_request) {
+        confirmMessage = `Your ${res.data.tier} ${res.data.card_type} card request has been submitted for employee approval.`
       } else if (res.data.loan_repayment) {
+       
         confirmMessage = `Payment of ${res.data.amount} applied. Remaining balance: ${res.data.remaining_balance}.`
       } else if (res.data.goal_contribution) {
         confirmMessage = `Contribution of ${res.data.amount} completed successfully.`
