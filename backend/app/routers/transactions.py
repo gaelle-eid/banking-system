@@ -1,5 +1,6 @@
 import uuid
 import random
+from decimal import Decimal
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +13,7 @@ from app.core.limits import check_transaction_limits, check_deposit_source_limit
 from app.core.fraud_detection import check_transaction_for_fraud
 from app.core.account_access import get_accessible_account_ids, user_can_access_account
 from app.core.exchange_rates import convert as convert_currency
-from app.models.models import Account, Transaction, TransactionType, TransactionStatus, User, TransferVerification, FundingSource, FundingSourceStatus, Card, CardType, CardStatus
+from app.models.models import Account, Transaction, TransactionType, TransactionStatus, TransactionCategory, User, TransferVerification, FundingSource, FundingSourceStatus, Card, CardType, CardStatus
 from app.schemas.transaction import DepositRequest, WithdrawalRequest, TransferRequest, TransactionOut, PhoneTransferInitiateRequest, PhoneTransferInitiateOut, PhoneTransferConfirmRequest
 from app.core.email import send_transfer_otp_email
 
@@ -62,6 +63,7 @@ async def deposit(
         status=TransactionStatus.completed,
         initiated_by=current_user.id,
         source=source_label,
+        category=TransactionCategory.income,
     )
     db.add(tx)
     await db.commit()
@@ -140,6 +142,7 @@ async def withdraw(
         initiated_by=current_user.id,
         method=payload.method,
         source=method_label,
+        category=payload.category or TransactionCategory.cash_withdrawal,
     )
     db.add(tx)
     await db.commit()
@@ -202,6 +205,11 @@ async def transfer(
         except Exception:
             raise HTTPException(status_code=503, detail="Exchange rate service is temporarily unavailable, please try again")
 
+    # Moving money to your OWN account isn't "spending" - only tag a
+    # category when the money is actually leaving to someone else.
+    is_to_own_account = to_account.owner_id == current_user.id
+    debit_category = None if is_to_own_account else (payload.category or TransactionCategory.transfer_to_person)
+
     from_account.balance -= payload.amount
     to_account.balance += credit_amount
 
@@ -213,6 +221,7 @@ async def transfer(
         status=TransactionStatus.completed,
         initiated_by=current_user.id,
         exchange_rate=exchange_rate,
+        category=debit_category,
     )
     credit_tx = Transaction(
         account_id=to_account.id,
@@ -268,6 +277,49 @@ async def get_account_transactions(
         select(Transaction).where(Transaction.account_id == account_id).order_by(Transaction.created_at.desc())
     )
     return result.scalars().all()
+
+
+@router.get("/spending/by-category")
+async def get_spending_by_category(
+    days: int = 30,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Aggregate the client's outgoing spending by category over the last
+    N days, across all their accounts. Powers spending breakdowns on the
+    dashboard and gives the AI assistant real numbers to reason with."""
+    my_account_ids = await get_accessible_account_ids(db, current_user.id)
+    if not my_account_ids:
+        return {"total": "0", "categories": []}
+
+    since = datetime.utcnow() - timedelta(days=days)
+
+    # "Spending" = money that actually left, with a category tag (deposits,
+    # internal own-account moves, and uncategorized system transactions are excluded).
+    result = await db.execute(
+        select(Transaction).where(
+            Transaction.account_id.in_(my_account_ids),
+            Transaction.type.in_([TransactionType.withdrawal, TransactionType.transfer_debit]),
+            Transaction.category.isnot(None),
+            Transaction.status == TransactionStatus.completed,
+            Transaction.created_at >= since,
+        )
+    )
+    txs = result.scalars().all()
+
+    totals = {}
+    for tx in txs:
+        cat = tx.category.value
+        totals[cat] = totals.get(cat, Decimal("0")) + tx.amount
+
+    total_spent = sum(totals.values(), Decimal("0"))
+    categories = sorted(
+        [{"category": cat, "amount": str(amt), "percent": round(float(amt / total_spent) * 100, 1) if total_spent else 0}
+         for cat, amt in totals.items()],
+        key=lambda c: float(c["amount"]), reverse=True,
+    )
+
+    return {"total": str(total_spent), "days": days, "categories": categories}
 
 
 @router.get("/recipients/recent")
@@ -440,7 +492,7 @@ async def confirm_phone_transfer(
         account_id=from_account.id, type=TransactionType.transfer_debit,
         amount=verification.amount, transfer_group_id=group_id,
         status=TransactionStatus.completed, initiated_by=current_user.id,
-        exchange_rate=exchange_rate,
+        exchange_rate=exchange_rate, category=TransactionCategory.transfer_to_person,
     )
     credit_tx = Transaction(
         account_id=to_account.id, type=TransactionType.transfer_credit,

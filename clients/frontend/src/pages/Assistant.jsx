@@ -114,14 +114,38 @@ export default function Assistant() {
     <Layout>
       <h1 className="font-display text-2xl font-semibold text-ink-950 mb-6">Assistant</h1>
 
-      <div className="bg-white rounded-2xl border border-stone-300/40 flex flex-col h-[calc(100vh-180px)] max-w-2xl">
+      <div className="bg-white rounded-2xl border border-stone-300/40 flex flex-col h-[calc(100vh-180px)] max-w-3xl">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.map((msg, i) => (
+          {messages.map((msg, i) => {
+            const isStudy = msg.role === 'assistant' && msg.content.includes('Feasibility study')
+            return (
             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
-                msg.role === 'user' ? 'bg-ink-950 text-white' : 'bg-paper-50 text-ink-950'
+              <div className={`${msg.role === 'user' ? 'max-w-[75%]' : 'max-w-[92%]'} rounded-2xl px-4 py-3 text-sm ${
+                msg.role === 'user'
+                  ? 'bg-ink-950 text-white'
+                  : isStudy
+                    ? 'bg-white border-2 border-ink-950/10 shadow-sm'
+                    : 'bg-paper-50 text-ink-950'
               }`}>
-                <div className="prose prose-sm max-w-none [&_p]:m-0 [&_strong]:font-semibold">
+                {isStudy && (
+                  <div className="flex items-center gap-2 mb-2 pb-2 border-b border-stone-300/40">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                      <path d="M9 11l3 3L22 4" stroke="#C41E3A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" stroke="#C41E3A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span className="text-xs uppercase tracking-wide font-semibold text-crimson-600">Feasibility Study</span>
+                  </div>
+                )}
+                <div className="prose prose-sm max-w-none
+                  [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0
+                  [&_strong]:font-semibold [&_strong]:text-ink-950
+                  [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ul]:space-y-1
+                  [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_ol]:space-y-1
+                  [&_li]:leading-snug
+                  [&_h1]:text-base [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1
+                  [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1
+                  [&_hr]:my-3 [&_hr]:border-stone-300/50
+                ">
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
                 {pendingActions[i] && (
@@ -143,7 +167,8 @@ export default function Assistant() {
                 )}
               </div>
             </div>
-          ))}
+            )
+          })}
           {loading && <div className="flex justify-start"><div className="bg-paper-50 rounded-2xl px-4 py-2.5 text-sm text-stone-500">Thinking...</div></div>}
           <div ref={bottomRef} />
         </div>

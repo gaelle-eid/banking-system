@@ -60,6 +60,21 @@ class TransactionType(str, enum.Enum):
     transfer_credit = "transfer_credit"
 
 
+class TransactionCategory(str, enum.Enum):
+    dining = "dining"
+    groceries = "groceries"
+    travel = "travel"
+    entertainment = "entertainment"
+    bills_utilities = "bills_utilities"
+    shopping = "shopping"
+    healthcare = "healthcare"
+    transfer_to_person = "transfer_to_person"
+    cash_withdrawal = "cash_withdrawal"
+    income = "income"
+    loan_repayment = "loan_repayment"
+    savings = "savings"
+    other = "other"
+
 class TransactionStatus(str, enum.Enum):
     pending = "pending"
     completed = "completed"
@@ -188,8 +203,8 @@ class Transaction(Base):
     exchange_rate = Column(Numeric(18, 8), nullable=True)  # set only on cross-currency transfer legs
     source = Column(String, nullable=True)  # funding source label, mainly for deposits (e.g. "BLOM Bank ••••4521")
     method = Column(String, nullable=True)  # withdrawal method: "atm" / "branch_teller" / "cash_back"
+    category = Column(Enum(TransactionCategory), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-
 # ---------- Extended banking ----------
 
 class Loan(Base):

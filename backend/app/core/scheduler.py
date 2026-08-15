@@ -9,7 +9,7 @@ async def run_monthly_fixed_contributions():
     from its source account to its goal account, for goals in 'fixed' mode."""
     from sqlalchemy import select
     from app.core.database import AsyncSessionLocal
-    from app.models.models import SavingsGoal, ContributionMode, Account, Transaction, TransactionType, TransactionStatus, User
+    from app.models.models import SavingsGoal, ContributionMode, Account, Transaction, TransactionType, TransactionStatus, TransactionCategory, User
     from app.core.email import send_email
     import uuid
 
@@ -42,7 +42,8 @@ async def run_monthly_fixed_contributions():
                 account_id=source_account.id, type=TransactionType.transfer_debit,
                 amount=goal.fixed_monthly_amount, transfer_group_id=group_id,
                 status=TransactionStatus.completed, initiated_by=goal.client_id,
-            ))
+                category=TransactionCategory.savings,
+            ))  
             db.add(Transaction(
                 account_id=goal_account.id, type=TransactionType.transfer_credit,
                 amount=goal.fixed_monthly_amount, transfer_group_id=group_id,
@@ -74,7 +75,7 @@ async def run_monthly_loan_repayments():
     remaining balance hits zero."""
     from sqlalchemy import select
     from app.core.database import AsyncSessionLocal
-    from app.models.models import Loan, LoanStatus, Account, Transaction, TransactionType, TransactionStatus, User
+    from app.models.models import Loan, LoanStatus, Account, Transaction, TransactionType, TransactionStatus, TransactionCategory, User
     from app.core.email import send_email
     from decimal import Decimal
     from datetime import datetime, timedelta
@@ -106,6 +107,7 @@ async def run_monthly_loan_repayments():
                 account_id=account.id, type=TransactionType.withdrawal,
                 amount=payment, status=TransactionStatus.completed,
                 initiated_by=loan.client_id, source="Loan Repayment",
+                category=TransactionCategory.loan_repayment,
             ))
 
             paid_off = loan.remaining_balance <= 0

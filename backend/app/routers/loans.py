@@ -6,7 +6,7 @@ from decimal import Decimal
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.audit import log_action
-from app.models.models import Loan, LoanStatus, Approval, ApprovalEntityType, ApprovalStatus, Account, Transaction, TransactionType, TransactionStatus, User
+from app.models.models import Loan, LoanStatus, Approval, ApprovalEntityType, ApprovalStatus, Account, Transaction, TransactionType, TransactionStatus, TransactionCategory, User
 from app.schemas.loan import LoanRequest, LoanOut, LoanRepaymentRequest
 
 router = APIRouter(prefix="/loans", tags=["loans"])
@@ -115,6 +115,7 @@ async def make_loan_payment(
         account_id=account.id, type=TransactionType.withdrawal,
         amount=payment, status=TransactionStatus.completed,
         initiated_by=current_user.id, source="Loan Repayment (manual)",
+        category=TransactionCategory.loan_repayment,
     ))
 
     if loan.remaining_balance <= 0:

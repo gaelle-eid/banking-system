@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import api from '../lib/api'
 import Layout from '../components/Layout'
 import { formatMoney, formatDate } from '../lib/format'
+import { SPENDING_CATEGORIES, categoryLabel, categoryIcon } from '../lib/categories'
 import { useToast } from '../context/ToastContext'
 import PhoneTransferForm from '../components/PhoneTransferForm'
 import JointOwners from '../components/JointOwners'
@@ -21,6 +22,7 @@ export default function AccountDetail() {
   const [depositSourceId, setDepositSourceId] = useState('')
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [withdrawMethod, setWithdrawMethod] = useState('atm')
+  const [withdrawCategory, setWithdrawCategory] = useState('')
   const [debitCards, setDebitCards] = useState([])
   const [hasUnactivatedCard, setHasUnactivatedCard] = useState(false)
   const [withdrawCardId, setWithdrawCardId] = useState('')
@@ -113,6 +115,7 @@ export default function AccountDetail() {
         amount: parseFloat(withdrawAmount),
         method: withdrawMethod,
         card_id: withdrawMethod === 'atm' ? withdrawCardId : undefined,
+        category: withdrawCategory || undefined,
       })
       setWithdrawAmount('')
       await loadData()
@@ -323,6 +326,15 @@ export default function AccountDetail() {
             placeholder="Amount"
             className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm mb-2 font-mono"
           />
+          <select
+            value={withdrawCategory} onChange={(e) => setWithdrawCategory(e.target.value)}
+            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm mb-2"
+          >
+            <option value="">What's this for? (optional)</option>
+            {SPENDING_CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>{c.icon} {c.label}</option>
+            ))}
+          </select>
           <button
             disabled={actionLoading || (withdrawMethod === 'atm' && debitCards.length === 0)}
             className="w-full bg-crimson-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-crimson-700 transition disabled:opacity-50"
@@ -380,11 +392,16 @@ export default function AccountDetail() {
             const isCredit = tx.type.includes('credit') || tx.type === 'deposit'
             return (
               <div key={tx.id} className="flex justify-between items-center px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium capitalize text-ink-950">{tx.type.replace('_', ' ')}</p>
-                  <p className="text-xs text-stone-500">
-                    {(tx.type === 'deposit' || tx.type === 'withdrawal') && tx.source ? `via ${tx.source} · ` : ''}{formatDate(tx.created_at)}
-                  </p>
+                <div className="flex items-center gap-3">
+                  {tx.category && (
+                    <span className="text-lg shrink-0" title={categoryLabel(tx.category)}>{categoryIcon(tx.category)}</span>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium capitalize text-ink-950">{tx.type.replace('_', ' ')}</p>
+                    <p className="text-xs text-stone-500">
+                      {(tx.type === 'deposit' || tx.type === 'withdrawal') && tx.source ? `via ${tx.source} · ` : ''}{formatDate(tx.created_at)}
+                    </p>
+                  </div>
                 </div>
                 <p className={`font-mono text-sm font-medium ${isCredit ? 'text-ink-950' : 'text-crimson-600'}`}>
                   {isCredit ? '+' : '-'}{formatMoney(tx.amount, account.currency)}

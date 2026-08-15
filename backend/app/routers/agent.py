@@ -12,7 +12,7 @@ from app.core.account_access import user_can_access_account
 from app.core.exchange_rates import convert as convert_currency
 from app.models.models import (
     User, AgentType, AgentMessageRole, AgentActionLog, AgentActionStatus, Account,
-    Transaction, TransactionType, TransactionStatus, SavingsGoal,
+    Transaction, TransactionType, TransactionStatus, TransactionCategory, SavingsGoal,
 )
 from app.schemas.agent import ChatRequest, ChatResponse
 from app.agents.client_agent import client_agent
@@ -84,17 +84,20 @@ async def confirm_agent_action(
         from_account.balance -= amount
         to_account.balance += credit_amount
 
+        is_to_own_account = to_account.owner_id == current_user.id
+        debit_category = None if is_to_own_account else TransactionCategory.transfer_to_person
+
         db.add(Transaction(
             account_id=from_account.id, type=TransactionType.transfer_debit,
             amount=amount, transfer_group_id=group_id,
             status=TransactionStatus.completed, initiated_by=current_user.id,
-            exchange_rate=exchange_rate,
+            exchange_rate=exchange_rate, category=debit_category,
         ))
         db.add(Transaction(
             account_id=to_account.id, type=TransactionType.transfer_credit,
             amount=credit_amount, transfer_group_id=group_id,
             status=TransactionStatus.completed, initiated_by=current_user.id,
-            exchange_rate=exchange_rate,
+            exchange_rate=exchange_rate, category=TransactionCategory.transfer_to_person,
         ))
 
         action.status = AgentActionStatus.executed
@@ -129,13 +132,14 @@ async def confirm_agent_action(
             account_id=source_account.id, type=TransactionType.transfer_debit,
             amount=amount, transfer_group_id=group_id,
             status=TransactionStatus.completed, initiated_by=current_user.id,
+            category=TransactionCategory.savings,
         ))
         db.add(Transaction(
             account_id=goal_account.id, type=TransactionType.transfer_credit,
             amount=amount, transfer_group_id=group_id,
             status=TransactionStatus.completed, initiated_by=current_user.id,
+            category=TransactionCategory.savings,
         ))
-
         action.status = AgentActionStatus.executed
         action.output = json.dumps({"transfer_group_id": group_id})
         await db.commit()
@@ -179,8 +183,7 @@ async def confirm_agent_action(
         return {"status": "executed", "goal_account_nickname": goal_account.nickname}
 
     if action.tool_name == "loan_repayment":
-        from app.models.models import Loan, LoanStatus, Account, TransactionType, TransactionStatus
-
+        from app.models.models import Loan, LoanStatus, TransactionType, TransactionStatus
         data = json.loads(action.input)
         loan_result = await db.execute(select(Loan).where(Loan.id == data["loan_id"]))
         loan = loan_result.scalar_one_or_none()
@@ -206,6 +209,7 @@ async def confirm_agent_action(
             account_id=account.id, type=TransactionType.withdrawal,
             amount=payment, status=TransactionStatus.completed,
             initiated_by=current_user.id, source="Loan Repayment (via Assistant)",
+            category=TransactionCategory.loan_repayment,
         ))
 
         if loan.remaining_balance <= 0:

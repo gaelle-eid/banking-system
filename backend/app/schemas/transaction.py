@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from decimal import Decimal
 from datetime import datetime
-from app.models.models import TransactionType, TransactionStatus
+from app.models.models import TransactionType, TransactionStatus, TransactionCategory
 
 
 class DepositRequest(BaseModel):
@@ -15,12 +15,14 @@ class WithdrawalRequest(BaseModel):
     amount: Decimal = Field(gt=0)
     method: str  # "atm" / "branch_teller" / "cash_back"
     card_id: str | None = None  # required when method is "atm"
+    category: TransactionCategory | None = None
 
 
 class TransferRequest(BaseModel):
     from_account_id: str
     to_account_id: str
     amount: Decimal = Field(gt=0)
+    category: TransactionCategory | None = None
 
 
 class TransactionOut(BaseModel):
@@ -33,6 +35,7 @@ class TransactionOut(BaseModel):
     exchange_rate: Decimal | None = None
     source: str | None = None
     method: str | None = None
+    category: TransactionCategory | None = None
     created_at: datetime
 
     class Config:

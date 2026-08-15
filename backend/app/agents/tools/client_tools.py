@@ -377,6 +377,7 @@ async def recommend_card_tier(ctx: RunContext[ClientAgentDeps]) -> str:
     )
 
 
+
 async def propose_phone_transfer(
     ctx: RunContext[ClientAgentDeps],
     amount: float,
@@ -446,6 +447,7 @@ async def propose_phone_transfer(
         f"Reply with the 6-digit code to complete the transfer. Verification id: {verification.id}"
     )
 
+
 async def confirm_phone_transfer_otp(
     ctx: RunContext[ClientAgentDeps],
     verification_id: str,
@@ -506,11 +508,13 @@ async def confirm_phone_transfer_otp(
     from_account.balance -= verification.amount
     to_account.balance += credit_amount
 
+    from app.models.models import TransactionCategory
+
     ctx.deps.db.add(Transaction(
         account_id=from_account.id, type=TransactionType.transfer_debit,
         amount=verification.amount, transfer_group_id=group_id,
         status=TransactionStatus.completed, initiated_by=ctx.deps.user_id,
-        exchange_rate=exchange_rate,
+        exchange_rate=exchange_rate, category=TransactionCategory.transfer_to_person,
     ))
     ctx.deps.db.add(Transaction(
         account_id=to_account.id, type=TransactionType.transfer_credit,
@@ -524,10 +528,17 @@ async def confirm_phone_transfer_otp(
     if exchange_rate:
         return f"Transfer completed successfully - {verification.amount} {from_account.currency} converted to {credit_amount} {to_account.currency}."
     return f"Transfer of {verification.amount} completed successfully."
+
+
 async def analyze_spending(ctx: RunContext[ClientAgentDeps], account_nickname: str | None = None) -> str:
-    """Analyze the client's recent spending (withdrawals and outgoing
-    transfers) and give concrete, actionable advice on where they could
-    cut back to save money - e.g. 'reduce X by 10% to save $Y/month'.
+    """Analyze the client's recent spending broken down by REAL category
+    (dining, groceries, travel, shopping, etc. - based on what they've
+    actually tagged their withdrawals and transfers as) and give concrete,
+    specific advice - e.g. 'you spend $200/month on dining; cutting to
+    $100 would save $100/month'. Use this whenever the client asks about
+    their spending, wants budgeting advice, or is discussing a savings
+    goal (always check this BEFORE proposing a goal timeline, so the
+    numbers you give are grounded in their real habits, not guesses).
     If account_nickname is given, analyze just that account; otherwise
     analyze across all their accounts."""
 
@@ -558,37 +569,54 @@ async def analyze_spending(ctx: RunContext[ClientAgentDeps], account_nickname: s
         return "You haven't had any outgoing transactions in the last 30 days - nothing to analyze yet."
 
     total_outgoing = sum(float(t.amount) for t in outgoing_txs)
-    withdrawal_total = sum(float(t.amount) for t in outgoing_txs if t.type.value == "withdrawal")
-    transfer_total = sum(float(t.amount) for t in outgoing_txs if t.type.value == "transfer_debit")
     tx_count = len(outgoing_txs)
-    avg_tx = total_outgoing / tx_count if tx_count else 0
 
-    potential_savings_10pct = total_outgoing * 0.10
+    # Real category breakdown - only counts transactions that actually have
+    # a spending category tag (uncategorized system moves are excluded).
+    category_totals = {}
+    uncategorized_total = 0.0
+    for tx in outgoing_txs:
+        if tx.category:
+            cat = tx.category.value
+            category_totals[cat] = category_totals.get(cat, 0.0) + float(tx.amount)
+        else:
+            uncategorized_total += float(tx.amount)
+
+    sorted_categories = sorted(category_totals.items(), key=lambda c: c[1], reverse=True)
 
     lines = [
-        f"Spending analysis (last 30 days):",
-        f"- Total outgoing: {total_outgoing:.2f} across {tx_count} transactions",
-        f"- Withdrawals: {withdrawal_total:.2f}",
-        f"- Outgoing transfers: {transfer_total:.2f}",
-        f"- Average transaction size: {avg_tx:.2f}",
+        f"Spending analysis (last 30 days): {total_outgoing:.2f} total across {tx_count} transactions.",
         "",
-        f"If you reduced overall outgoing spending by just 10%, you'd save "
-        f"approximately {potential_savings_10pct:.2f} per month.",
     ]
 
-    if withdrawal_total > transfer_total:
+    if sorted_categories:
+        lines.append("By category:")
+        for cat, amt in sorted_categories:
+            label = cat.replace("_", " ").title()
+            pct = (amt / total_outgoing) * 100 if total_outgoing else 0
+            lines.append(f"- {label}: {amt:.2f} ({pct:.0f}%)")
+        if uncategorized_total:
+            lines.append(f"- Uncategorized: {uncategorized_total:.2f}")
+        lines.append("")
+
+        top_category, top_amount = sorted_categories[0]
+        top_label = top_category.replace("_", " ").title()
+        cut_20pct = top_amount * 0.20
+        cut_50pct = top_amount * 0.50
         lines.append(
-            "Most of your outgoing money is cash withdrawals - consider tracking what these "
-            "are for, since cash spending is often the easiest place to trim."
+            f"Your biggest category is {top_label} at {top_amount:.2f}/month. Some concrete options: "
+            f"cutting it by 20% (to {top_amount - cut_20pct:.2f}) would free up {cut_20pct:.2f}/month, "
+            f"or cutting it by half (to {top_amount - cut_50pct:.2f}) would free up {cut_50pct:.2f}/month. "
+            f"Use these real numbers when discussing savings goals or timelines with the client - don't "
+            f"just suggest a generic percentage of total spending."
         )
-    elif tx_count > 10:
+    else:
         lines.append(
-            f"You have a high number of transactions ({tx_count}) - frequent small transfers "
-            "can add up. Consolidating them might help you spend more intentionally."
+            "None of these transactions have a spending category tag yet, so I can't break this down "
+            "by what it was actually for - only a generic total is available."
         )
 
     return "\n".join(lines)
-
 
 
 async def propose_savings_goal(
@@ -597,18 +625,149 @@ async def propose_savings_goal(
     target_amount: float,
     source_account_type: str | None = None,
     source_account_nickname: str | None = None,
+    confirmed: bool = False,
 ) -> str:
-    """Propose creating a new savings goal with a dedicated account
-    (e.g. 'Car', 'Vacation', 'Emergency Fund'). This creates a pending
-    action the client must confirm before the goal account is actually
-    created. source_account_type/nickname identifies which of the
-    client's accounts contributions would come from later (checking,
-    typically)."""
+    """Set up a new savings goal - this is a TWO-CALL tool, not two
+    separate tools, so the study can never be skipped by accident.
+
+    FIRST call (confirmed left as False, the default): call this as soon
+    as the client has given you a goal name, target amount, and funding
+    account. It returns a feasibility study - pros, cons, and a
+    feasibility rating grounded in their real balance and spending.
+    Present that study to the client EXACTLY as returned (it's already
+    formatted) and then STOP. Do not say anything else and do not call
+    this tool again in the same turn.
+
+    SECOND call (confirmed=True): only call this again, with confirmed
+    explicitly set to True, after the client's NEXT message clearly says
+    yes/go ahead/let's do it. This actually creates the pending goal
+    action, which the client must then confirm via the UI button.
+
+    NEVER set confirmed=True on the first call, and never invent a goal
+    name, amount, or account the client hasn't actually given you."""
+    from datetime import datetime, timedelta
 
     source_account, err = await _resolve_own_account(ctx, source_account_type, source_account_nickname)
     if err:
         return err
 
+    if not confirmed:
+        # Step one: feasibility study only. No pending action is created here.
+        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+        accessible = await get_accessible_accounts(ctx.deps.db, ctx.deps.user_id)
+        account_ids = [a.id for a in accessible]
+
+        tx_result = await ctx.deps.db.execute(
+            select(Transaction).where(
+                Transaction.account_id.in_(account_ids),
+                Transaction.type.in_(["withdrawal", "transfer_debit"]),
+                Transaction.created_at >= thirty_days_ago,
+                Transaction.category.isnot(None),
+            )
+        )
+        recent_spending = tx_result.scalars().all()
+        category_totals = {}
+        for tx in recent_spending:
+            cat = tx.category.value
+            category_totals[cat] = category_totals.get(cat, 0.0) + float(tx.amount)
+
+        balance = float(source_account.balance)
+        pct_covered = min(100.0, (balance / target_amount) * 100) if target_amount else 0
+
+        monthly_3mo = target_amount / 3
+        monthly_6mo = target_amount / 6
+        monthly_12mo = target_amount / 12
+
+        # Realistic cut percentages by category type - discretionary
+        # spending (dining, shopping, entertainment) can reasonably be
+        # trimmed more than necessities (groceries, bills, healthcare),
+        # unlike a flat "cut everything in half" assumption.
+        CATEGORY_FLEXIBILITY = {
+            "dining": 0.25,
+            "entertainment": 0.25,
+            "shopping": 0.25,
+            "travel": 0.20,
+            "cash_withdrawal": 0.15,
+            "other": 0.15,
+            "transfer_to_person": 0.10,
+            "groceries": 0.10,
+            "bills_utilities": 0.05,
+            "healthcare": 0.05,
+        }
+        NECESSITY_CATEGORIES = {"groceries", "bills_utilities", "healthcare"}
+
+        sorted_categories = sorted(category_totals.items(), key=lambda c: c[1], reverse=True)
+        category_savings = []
+        for cat, amt in sorted_categories:
+            flex_pct = CATEGORY_FLEXIBILITY.get(cat, 0.15)
+            savings = amt * flex_pct
+            category_savings.append((cat, amt, flex_pct, savings))
+
+        total_potential_savings = sum(s[3] for s in category_savings)
+
+        if total_potential_savings >= monthly_6mo * 1.5:
+            feasibility = "Comfortable"
+        elif total_potential_savings >= monthly_6mo:
+            feasibility = "Tight but doable"
+        else:
+            feasibility = "Ambitious"
+
+        pros = []
+        cons = []
+
+        if balance > 0:
+            pros.append(f"{source_account.nickname} already holds {balance:.2f}, covering {pct_covered:.0f}% of the target immediately.")
+        else:
+            cons.append(f"{source_account.nickname} currently has no balance - the full {target_amount:.2f} would need to come from future contributions.")
+
+        # Show up to the top 3 categories with realistic, category-specific
+        # cut suggestions, not just one category cut in half.
+        if category_savings:
+            for cat, amt, flex_pct, savings in category_savings[:3]:
+                label = cat.replace("_", " ").title()
+                kind = "a necessity - only modest cuts are realistic" if cat in NECESSITY_CATEGORIES else "discretionary - more flexible to cut"
+                pros.append(
+                    f"{label} ({amt:.2f}/month, {kind}): trimming {flex_pct*100:.0f}% would free up {savings:.2f}/month."
+                )
+            if len(category_savings) > 1:
+                pros.append(f"Combined across these categories, a realistic monthly savings potential is about {total_potential_savings:.2f}.")
+            necessity_share = sum(amt for cat, amt, _, _ in category_savings if cat in NECESSITY_CATEGORIES)
+            total_spend = sum(amt for _, amt, _, _ in category_savings)
+            if total_spend and necessity_share / total_spend > 0.5:
+                cons.append("More than half of your spending is on necessities (groceries, bills, healthcare), which limits how much can realistically be cut.")
+            if feasibility == "Ambitious":
+                cons.append("Even realistic cuts across your top categories don't fully cover a 6-month timeline - a longer timeline or a smaller target would be more comfortable.")
+        else:
+            cons.append("There's no categorized spending to point to yet - contributions would need to come from general budgeting rather than a specific cut.")
+
+        pros.append(f"A 6-month timeline only needs {monthly_6mo:.2f}/month; a 12-month timeline needs just {monthly_12mo:.2f}/month.")
+        cons.append("Like any goal, unexpected expenses can slow progress unless contributions are automated (fixed monthly auto-save).")
+
+        lines = [
+            f"**Feasibility study — \"{goal_name}\", target {target_amount:.2f}**",
+            "",
+            f"Funding from: {source_account.nickname} (currently {balance:.2f})",
+            f"Feasibility: **{feasibility}**",
+            "",
+            "**Pros:**",
+        ]
+        for p in pros:
+            lines.append(f"- {p}")
+        lines.append("")
+        lines.append("**Cons:**")
+        for c in cons:
+            lines.append(f"- {c}")
+        lines.append("")
+        lines.append(
+            f"Suggested timelines: 3 months = {monthly_3mo:.2f}/month · 6 months = {monthly_6mo:.2f}/month · "
+            f"12 months = {monthly_12mo:.2f}/month."
+        )
+        lines.append("")
+        lines.append("Want me to go ahead and set this up?")
+
+        return "\n".join(lines)
+
+    # Step two: client already confirmed - actually create the pending action.
     action = AgentActionLog(
         conversation_id=ctx.deps.conversation_id,
         tool_name="create_savings_goal",
@@ -627,7 +786,6 @@ async def propose_savings_goal(
         f"This will create a dedicated '{goal_name}' savings account, with contributions coming from "
         f"your {source_account.nickname}. This hasn't been created yet - please confirm using action id {action.id}."
     )
-
 
 
 async def contribute_to_goal(
@@ -720,11 +878,11 @@ async def set_goal_savings_plan(
             f"Done - '{goal.name}' will now auto-save {fixed_monthly_amount} on the 1st of each month, "
             f"moved automatically from its funding account. No action needed on your end each month."
         )
-    
     return (
         f"Done - '{goal.name}' is now on a variable plan. You'll get a reminder on the 1st of each month "
         f"and can tell me how much to contribute that month."
     )
+
 
 async def get_account_statement(
     ctx: RunContext[ClientAgentDeps],
@@ -755,6 +913,7 @@ async def get_account_statement(
         f"Total withdrawals: {statement.total_withdrawals} {statement.currency}\n\n"
         f"Statement ID: {statement.id}"
     )
+
 
 async def get_my_loans(ctx: RunContext[ClientAgentDeps]) -> str:
     """Check the client's loans - status, remaining balance, monthly
@@ -831,3 +990,5 @@ async def propose_loan_payment(
         f"I've prepared a payment of {amount} toward your loan (remaining balance {loan.remaining_balance}). "
         f"This hasn't been executed yet - please confirm using action id {action.id}."
     )
+
+
