@@ -7,6 +7,24 @@ from app.models.models import Transaction, TransactionStatus, TransactionType, F
 from app.core.email import send_email
 
 
+async def would_trigger_velocity_block(db: AsyncSession, account_id: str) -> bool:
+    """Real-time check run BEFORE a withdrawal/transfer executes - unlike
+    the other rules below, which only flag a transaction for review AFTER
+    it's already gone through. Rapid-fire activity (5+ money-out moves in
+    5 minutes) is a strong enough signal of a compromised account or bot
+    that real banks block it outright rather than review it after the fact."""
+    five_min_ago = datetime.utcnow() - timedelta(minutes=5)
+    result = await db.execute(
+        select(func.count(Transaction.id)).where(
+            Transaction.account_id == account_id,
+            Transaction.type.in_([TransactionType.withdrawal, TransactionType.transfer_debit]),
+            Transaction.created_at >= five_min_ago,
+            Transaction.status == TransactionStatus.completed,
+        )
+    )
+    recent_count = result.scalar() or 0
+    return recent_count >= 4  # this new one would make it the 5th
+
 async def check_transaction_for_fraud(db: AsyncSession, account, transaction, current_user) -> FraudFlag | None:
     """Run simple anomaly rules against a just-completed transaction.
     Returns a FraudFlag if something looks unusual, otherwise None."""

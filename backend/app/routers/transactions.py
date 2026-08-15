@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.email import send_transaction_email
 from app.core.limits import check_transaction_limits, check_deposit_source_limit, check_atm_withdrawal_limit, MAX_CASH_BACK_PER_TRANSACTION, MAX_EXTERNAL_WALLET_WITHDRAWAL, is_new_phone_recipient, check_new_recipient_transfer_limit, MAX_OTP_ATTEMPTS
-from app.core.fraud_detection import check_transaction_for_fraud
+from app.core.fraud_detection import check_transaction_for_fraud, would_trigger_velocity_block
 from app.core.account_access import get_accessible_account_ids, user_can_access_account
 from app.core.exchange_rates import convert as convert_currency
 from app.models.models import Account, Transaction, TransactionType, TransactionStatus, TransactionCategory, User, TransferVerification, FundingSource, FundingSourceStatus, Card, CardType, CardStatus
@@ -147,6 +147,11 @@ async def withdraw(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    if await would_trigger_velocity_block(db, account.id):
+        raise HTTPException(
+            status_code=403,
+            detail="This withdrawal was blocked due to unusually rapid activity on this account. Please contact support.",
+        )
     account.balance -= payload.amount
     tx = Transaction(
         account_id=account.id,
@@ -205,8 +210,13 @@ async def transfer(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    group_id = str(uuid.uuid4())
+    if await would_trigger_velocity_block(db, from_account.id):
+        raise HTTPException(
+            status_code=403,
+            detail="This transfer was blocked due to unusually rapid activity on this account. Please contact support.",
+        )
 
+    group_id = str(uuid.uuid4())
     exchange_rate = None
     credit_amount = payload.amount
     if from_account.currency != to_account.currency:
@@ -421,6 +431,12 @@ async def initiate_phone_transfer(
         check_new_recipient_transfer_limit(is_new, payload.amount)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    if await would_trigger_velocity_block(db, from_account.id):
+        raise HTTPException(
+            status_code=403,
+            detail="This transfer was blocked due to unusually rapid activity on this account. Please contact support.",
+        )
 
     otp = f"{random.randint(0, 999999):06d}"
     verification = TransferVerification(

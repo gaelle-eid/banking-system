@@ -6,18 +6,30 @@ import StatCard from '../components/StatCard'
 import StatusBadge from '../components/StatusBadge'
 import { formatMoney, formatDate } from '../lib/format'
 
+const SEVERITY_STYLES = {
+  high: 'bg-crimson-600 text-white',
+  medium: 'bg-amber-500 text-white',
+  low: 'bg-slate-300 text-slate-700',
+}
+
 export default function Dashboard() {
   const [summary, setSummary] = useState(null)
   const [pending, setPending] = useState([])
+  const [registrations, setRegistrations] = useState([])
+  const [fraudFlags, setFraudFlags] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     Promise.all([
       api.get('/reports/summary'),
       api.get('/approvals?status=pending'),
-    ]).then(([summaryRes, approvalsRes]) => {
+      api.get('/registrations/pending'),
+      api.get('/fraud?status=pending'),
+    ]).then(([summaryRes, approvalsRes, registrationsRes, fraudRes]) => {
       setSummary(summaryRes.data)
       setPending(approvalsRes.data.slice(0, 5))
+      setRegistrations(registrationsRes.data.slice(0, 3))
+      setFraudFlags(fraudRes.data.slice(0, 3))
       setLoading(false)
     })
   }, [])
@@ -30,18 +42,29 @@ export default function Dashboard() {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          {[1, 2, 3, 4].map((i) => (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
             <div key={i} className="h-28 bg-slate-300/20 rounded-xl animate-pulse" />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
           <StatCard
             label="Pending approvals"
             value={summary.pending_approvals}
             accent
             icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 8v4l3 3" stroke="white" strokeWidth="2" strokeLinecap="round"/><circle cx="12" cy="12" r="9" stroke="white" strokeWidth="2"/></svg>}
+          />
+          <StatCard
+            label="Pending registrations"
+            value={summary.pending_registrations}
+            icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.5" stroke="currentColor" strokeWidth="2"/><path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><path d="M18 8v4M20 10h-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>}
+          />
+          <StatCard
+            label="Fraud alerts"
+            value={summary.pending_fraud_flags}
+            danger={summary.pending_fraud_flags > 0}
+            icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 9v4M12 17h.01" stroke={summary.pending_fraud_flags > 0 ? 'white' : 'currentColor'} strokeWidth="2" strokeLinecap="round"/><path d="M10.3 3.9L2.7 17.5A1.5 1.5 0 004 19.7h16a1.5 1.5 0 001.3-2.2L13.7 3.9a1.5 1.5 0 00-2.6 0z" stroke={summary.pending_fraud_flags > 0 ? 'white' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
           />
           <StatCard
             label="Total client deposits"
@@ -67,20 +90,20 @@ export default function Dashboard() {
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-xl border border-slate-300/40 divide-y divide-slate-300/30">
+        <div className="bg-white rounded-xl border border-slate-300/40 divide-y divide-slate-300/30 mb-8">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-16 bg-slate-300/10 animate-pulse" />
           ))}
         </div>
       ) : pending.length === 0 ? (
-        <div className="bg-white rounded-2xl p-10 text-center border border-slate-300/40">
+        <div className="bg-white rounded-2xl p-10 text-center border border-slate-300/40 mb-8">
           <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </div>
           <p className="text-slate-500">All caught up — no pending approvals.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-300/40 divide-y divide-slate-300/30">
+        <div className="bg-white rounded-xl border border-slate-300/40 divide-y divide-slate-300/30 mb-8">
           {pending.map((a) => (
             <div key={a.id} className="flex justify-between items-center px-4 py-3">
               <div className="flex items-center gap-3">
@@ -101,6 +124,59 @@ export default function Dashboard() {
           ))}
         </div>
       )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="font-display text-lg font-semibold text-steel-900">New registrations</h2>
+            <Link to="/pending-registrations" className="text-sm text-crimson-600 font-medium hover:underline">View all →</Link>
+          </div>
+          {loading ? (
+            <div className="h-32 bg-slate-300/10 rounded-xl animate-pulse" />
+          ) : registrations.length === 0 ? (
+            <div className="bg-white rounded-xl p-6 text-center border border-slate-300/40">
+              <p className="text-sm text-slate-500">No pending registrations.</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-slate-300/40 divide-y divide-slate-300/30">
+              {registrations.map((r) => (
+                <div key={r.id} className="px-4 py-3">
+                  <p className="text-sm font-medium text-steel-900">{r.full_name}</p>
+                  <p className="text-xs text-slate-500">{r.email} · Submitted {formatDate(r.created_at)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="font-display text-lg font-semibold text-steel-900">Fraud alerts</h2>
+            <Link to="/fraud-review" className="text-sm text-crimson-600 font-medium hover:underline">View all →</Link>
+          </div>
+          {loading ? (
+            <div className="h-32 bg-slate-300/10 rounded-xl animate-pulse" />
+          ) : fraudFlags.length === 0 ? (
+            <div className="bg-white rounded-xl p-6 text-center border border-slate-300/40">
+              <p className="text-sm text-slate-500">No pending fraud alerts.</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-slate-300/40 divide-y divide-slate-300/30">
+              {fraudFlags.map((f) => (
+                <div key={f.id} className="px-4 py-3">
+                  <div className="flex justify-between items-start gap-2">
+                    <p className="text-sm text-steel-900 flex-1">{f.reason}</p>
+                    <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full shrink-0 ${SEVERITY_STYLES[f.severity]}`}>
+                      {f.severity}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">{formatDate(f.created_at)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </Layout>
   )
 }

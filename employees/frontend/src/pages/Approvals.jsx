@@ -3,7 +3,10 @@ import api from '../lib/api'
 import Layout from '../components/Layout'
 import StatusBadge from '../components/StatusBadge'
 import { useToast } from '../context/ToastContext'
+import { useAuth } from '../context/AuthContext'
 import { formatDate } from '../lib/format'
+
+const LARGE_LOAN_THRESHOLD_LABEL = '$10,000'
 
 const filters = [
   { label: 'Pending', value: 'pending' },
@@ -21,6 +24,7 @@ export default function Approvals() {
   const [interestRate, setInterestRate] = useState('')
   const [processingId, setProcessingId] = useState(null)
   const { showToast } = useToast()
+  const { user } = useAuth()
 
   async function loadApprovals() {
     setLoading(true)
@@ -106,7 +110,9 @@ export default function Approvals() {
                     {entityIcon(a.entity_type)}
                   </div>
                   <div>
-                    <p className="text-sm font-medium capitalize text-steel-900">{a.entity_type} request</p>
+                    <p className="text-sm font-medium capitalize text-steel-900">
+                      {a.entity_type} request{a.requested_by_name ? ` — ${a.requested_by_name}` : ''}
+                    </p>
                     <p className="text-xs text-slate-500">Requested {formatDate(a.created_at)}</p>
                   </div>
                 </div>
@@ -123,12 +129,93 @@ export default function Approvals() {
 
               {expandedId === a.id && (
                 <div className="px-4 pb-4 border-t border-slate-300/30 pt-4">
-                  <div className="text-xs text-slate-500 space-y-1 mb-4 font-mono">
-                    <p>Approval ID: {a.id}</p>
-                    <p>Entity ID: {a.entity_id}</p>
-                    <p>Requested by: {a.requested_by}</p>
-                    {a.notes && <p>Notes: {a.notes}</p>}
+                  <div className="bg-slate-300/10 rounded-lg p-3 mb-4 space-y-1">
+                    <p className="text-sm text-steel-900">
+                      <span className="text-slate-500">Client:</span>{' '}
+                      <span className="font-medium">{a.requested_by_name || 'Unknown client'}</span>
+                      {a.requested_by_email && <span className="text-slate-500"> ({a.requested_by_email})</span>}
+                    </p>
+                    {a.entity_type === 'loan' && a.details && (
+                      <>
+                        <p className="text-sm text-steel-900">
+                          <span className="text-slate-500">Amount:</span>{' '}
+                          <span className="font-mono font-medium">{a.details.amount} {a.details.currency}</span>
+                          {' · '}
+                          <span className="text-slate-500">Term:</span>{' '}
+                          <span className="font-medium">{a.details.term_months} months</span>
+                        </p>
+                        {a.details.purpose && (
+                          <p className="text-sm text-steel-900">
+                            <span className="text-slate-500">Purpose:</span> {a.details.purpose}
+                          </p>
+                        )}
+                        {a.details.disbursement_account && (
+                          <p className="text-sm text-steel-900">
+                            <span className="text-slate-500">Disburse to:</span> {a.details.disbursement_account}
+                          </p>
+                        )}
+                      </>
+                    )}
+                    {a.entity_type === 'card' && a.details && (
+                      <p className="text-sm text-steel-900 capitalize">
+                        <span className="text-slate-500">Request:</span>{' '}
+                        <span className="font-medium">{a.details.tier} {a.details.type}</span>
+                        {a.details.account && <> for <span className="font-medium">{a.details.account}</span></>}
+                      </p>
+                    )}
+                    {a.notes && (
+                      <p className="text-sm text-steel-900">
+                        <span className="text-slate-500">Notes:</span> {a.notes}
+                      </p>
+                    )}
                   </div>
+
+                  {a.client_context && (
+                    <div className="border border-slate-300/40 rounded-lg p-3 mb-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-2">Client history</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-steel-900">
+                        <p><span className="text-slate-500">Member since:</span> {a.client_context.member_since ? formatDate(a.client_context.member_since) : '—'}</p>
+                        <p><span className="text-slate-500">Verified:</span> {a.client_context.is_verified ? 'Yes' : 'No'}</p>
+                        <p><span className="text-slate-500">Accounts:</span> {a.client_context.account_count}</p>
+                        <p><span className="text-slate-500">Active loans:</span> {a.client_context.active_loans_count} ({a.client_context.active_loans_remaining} owed)</p>
+                        <p><span className="text-slate-500">Active cards:</span> {a.client_context.active_cards_count}</p>
+                        <p className={a.client_context.pending_fraud_flags > 0 ? 'text-crimson-600 font-medium' : ''}>
+                          <span className={a.client_context.pending_fraud_flags > 0 ? '' : 'text-slate-500'}>Fraud flags:</span>{' '}
+                          {a.client_context.pending_fraud_flags}
+                          {a.client_context.highest_fraud_severity && ` (${a.client_context.highest_fraud_severity})`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {a.entity_type === 'loan' && a.details?.credit_assessment && (
+                    <div className="border border-slate-300/40 rounded-lg p-3 mb-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-2">Credit assessment</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-steel-900">
+                        <p><span className="text-slate-500">Avg monthly income:</span> {a.details.credit_assessment.avg_monthly_income}</p>
+                        <p><span className="text-slate-500">Existing monthly debt:</span> {a.details.credit_assessment.existing_monthly_debt}</p>
+                        <p>
+                          <span className="text-slate-500">Debt-to-income:</span>{' '}
+                          {a.details.credit_assessment.debt_to_income_pct !== null ? `${a.details.credit_assessment.debt_to_income_pct}%` : 'N/A'}
+                        </p>
+                        <p>
+                          <span className="text-slate-500">Risk tier:</span>{' '}
+                          <span className={`font-medium ${
+                            a.details.credit_assessment.risk_tier === 'High' ? 'text-crimson-600' :
+                            a.details.credit_assessment.risk_tier === 'Medium' ? 'text-amber-600' : ''
+                          }`}>
+                            {a.details.credit_assessment.risk_tier}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {a.requires_admin && (
+                    <div className="bg-crimson-100 text-crimson-600 text-xs font-medium rounded-lg px-3 py-2 mb-4">
+                      This loan is {LARGE_LOAN_THRESHOLD_LABEL} or more and requires admin sign-off.
+                    </div>
+                  )}
 
                   {a.status === 'pending' && (
                     <>
@@ -156,10 +243,14 @@ export default function Approvals() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleDecision(a.id, 'approve', a.entity_type)}
-                          disabled={processingId === a.id}
+                          disabled={processingId === a.id || (a.requires_admin && user?.role !== 'admin')}
                           className="px-4 py-2 bg-steel-900 text-white rounded-lg text-sm font-medium hover:bg-steel-800 transition disabled:opacity-50"
                         >
-                          {processingId === a.id ? 'Processing...' : 'Approve'}
+                          {processingId === a.id
+                            ? 'Processing...'
+                            : a.requires_admin && user?.role !== 'admin'
+                              ? 'Admin required'
+                              : 'Approve'}
                         </button>
                         <button
                           onClick={() => handleDecision(a.id, 'reject', a.entity_type)}

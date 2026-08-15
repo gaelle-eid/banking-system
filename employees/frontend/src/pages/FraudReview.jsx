@@ -92,7 +92,9 @@ export default function FraudReview() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-steel-900">{flag.reason.split('.')[0]}.</p>
-                    <p className="text-xs text-slate-500">Flagged {formatDateTime(flag.created_at)}</p>
+                    <p className="text-xs text-slate-500">
+                      {flag.client_name && `${flag.client_name} · `}Flagged {formatDateTime(flag.created_at)}
+                    </p>
                   </div>
                 </div>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${severityStyles[flag.severity]}`}>
@@ -103,11 +105,66 @@ export default function FraudReview() {
               {expandedId === flag.id && (
                 <div className="px-4 pb-4 border-t border-slate-300/30 pt-4">
                   <p className="text-sm text-steel-900 mb-3">{flag.reason}</p>
-                  <div className="text-xs text-slate-500 space-y-1 mb-4 font-mono">
-                    <p>Transaction ID: {flag.transaction_id}</p>
-                    <p>Account ID: {flag.account_id}</p>
-                    {flag.notes && <p>Notes: {flag.notes}</p>}
+                  <div className="bg-slate-300/10 rounded-lg p-3 mb-4 space-y-1">
+                    <p className="text-sm text-steel-900">
+                      <span className="text-slate-500">Client:</span>{' '}
+                      <span className="font-medium">{flag.client_name || 'Unknown client'}</span>
+                      {flag.client_email && <span className="text-slate-500"> ({flag.client_email})</span>}
+                    </p>
+                    {flag.account_label && (
+                      <p className="text-sm text-steel-900">
+                        <span className="text-slate-500">Account:</span> {flag.account_label}
+                      </p>
+                    )}
+                    {flag.transaction_details && (
+                      <p className="text-sm text-steel-900 capitalize">
+                        <span className="text-slate-500">Transaction:</span>{' '}
+                        <span className="font-mono font-medium">
+                          {flag.transaction_details.amount} {flag.transaction_details.currency}
+                        </span>
+                        {' '}({flag.transaction_details.type.replace('_', ' ')})
+                        {flag.transaction_details.source && ` — ${flag.transaction_details.source}`}
+                        {' · '}{formatDateTime(flag.transaction_details.created_at)}
+                      </p>
+                    )}
+                    {flag.notes && (
+                      <p className="text-sm text-steel-900">
+                        <span className="text-slate-500">Notes:</span> {flag.notes}
+                      </p>
+                    )}
                   </div>
+
+                  {flag.related_pending_flags && flag.related_pending_flags.length > 0 && (
+                    <div className="bg-crimson-100 rounded-lg p-3 mb-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-crimson-600 mb-2">
+                        {flag.related_pending_flags.length} other pending flag{flag.related_pending_flags.length !== 1 ? 's' : ''} for this client
+                      </p>
+                      <div className="space-y-1.5">
+                        {flag.related_pending_flags.map((rf) => (
+                          <p key={rf.id} className="text-xs text-crimson-600">
+                            <span className="uppercase font-medium">{rf.severity}</span> — {rf.reason.split('.')[0]}. ({formatDateTime(rf.created_at)})
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {flag.recent_transactions && flag.recent_transactions.length > 0 && (
+                    <div className="border border-slate-300/40 rounded-lg p-3 mb-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-2">
+                        Recent activity on this account
+                      </p>
+                      <div className="space-y-1">
+                        {flag.recent_transactions.map((rtx, i) => (
+                          <p key={i} className="text-xs text-steel-900 capitalize">
+                            <span className="font-mono">{rtx.amount}</span> — {rtx.type.replace('_', ' ')}
+                            {rtx.source && ` (${rtx.source})`}
+                            <span className="text-slate-500"> · {formatDateTime(rtx.created_at)}</span>
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {flag.status === 'pending' && (
                     <>
